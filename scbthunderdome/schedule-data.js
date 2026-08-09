@@ -167,7 +167,7 @@ const TEAM_SCHEDULES = [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "FCS Southeast", location: "vs", teamScore: 52, opponentScore: 21 },
       { week: 2, opponent: "Alabama", location: "vs", teamScore: 27, opponentScore: 10 },
-      { week: 3, opponent: "Texas A&M", location: "at" },
+      { week: 3, opponent: "Texas A&M", location: "at", teamScore: 35, opponentScore: 10 },
       { week: 4, opponent: "South Alabama", location: "vs" },
       { week: 5, opponent: "South Carolina", location: "at" },
       { week: 6, opponent: "LSU", location: "vs" },

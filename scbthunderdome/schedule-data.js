@@ -211,7 +211,7 @@ const TEAM_SCHEDULES = [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "Kent State", location: "vs", teamScore: 49, opponentScore: 6 },
       { week: 2, opponent: "FCS Southeast", location: "vs", teamScore: 75, opponentScore: 10 },
-      { week: 3, opponent: "Mississippi State", location: "vs" },
+      { week: 3, opponent: "Mississippi State", location: "vs", teamScore: 34, opponentScore: 18 },
       { week: 4, opponent: "Alabama", location: "at" },
       { week: 5, opponent: "Kentucky", location: "vs" },
       { week: 6, opponent: "Florida", location: "at" },

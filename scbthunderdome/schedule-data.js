@@ -301,7 +301,7 @@ const TEAM_SCHEDULES = [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "Tulsa", location: "at", teamScore: 44, opponentScore: 0 },
       { week: 2, opponent: "Oregon", location: "vs", teamScore: 27, opponentScore: 17 },
-      { week: 3, opponent: "FCS Midwest", location: "vs" },
+      { week: 3, opponent: "FCS Midwest", location: "vs", teamScore: 59, opponentScore: 0 },
       { week: 4, opponent: "West Virginia", location: "at" },
       { week: 5, note: "BYE" },
       { week: 6, opponent: "UCF", location: "vs" },

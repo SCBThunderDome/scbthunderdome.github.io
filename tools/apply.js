@@ -45,6 +45,8 @@
 const fs = require("fs");
 const path = require("path");
 
+const Deadline = require("../deadline");
+
 const {
   die,
   resolveLeague,
@@ -144,6 +146,26 @@ function requireSafeText(value, field) {
   return v;
 }
 
+/* One reading of "the deadline field", shared by the advance and the
+   deadline actions so they can't diverge. Returns the canonical form
+   to store: "" for a deliberate clear, otherwise a timestamp or a
+   bare date. Anything else fails the submission loudly rather than
+   being written somewhere no one re-reads. */
+function parseDeadlineField(value) {
+  if (typeof value !== "string") bad("deadline must be a string");
+  const at = value.trim();
+  if (at.length > 40) bad("deadline is longer than 40 characters");
+
+  const stored = Deadline.canonical(at);
+  if (stored === null) {
+    bad(
+      `deadline ${JSON.stringify(at)} isn't a date — expected ` +
+        `2026-08-13T23:00:00-04:00 or 2026-08-13`
+    );
+  }
+  return stored;
+}
+
 function validate(payload) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     bad("expected a JSON object");
@@ -209,22 +231,36 @@ function validate(payload) {
     if (payload.confirm !== true) {
       bad("advance requires an explicit confirmation");
     }
-    out.next = payload.next === undefined ? undefined : requireSafeText(payload.next, "next");
+    /* THE DEADLINE ARRIVES AS A DATE, NOT A SENTENCE.
+       The admin page sends `nextAt` — "2026-08-13T23:00:00-04:00",
+       or a bare "2026-08-13" for a deadline shown without a time.
+       The sentence coaches read is generated from it further down,
+       by the same code the command-line tool uses.
+
+       Rejecting an unparseable value outright is the point: storing
+       one would leave the site showing a deadline that no tool can
+       read, and the advance-day heads-up would stop firing with
+       nothing to say why.
+
+       `next` (free text) is still accepted from an older admin page
+       that hasn't been reloaded since this changed, but only to be
+       reinterpreted as a date — the same rule, not a bypass. */
+    const rawAt = payload.nextAt !== undefined ? payload.nextAt : payload.next;
+    out.nextAt = rawAt === undefined ? undefined : parseDeadlineField(rawAt);
     out.status = payload.status === undefined ? undefined : requireSafeText(payload.status, "status");
   }
 
   if (action === "deadline") {
     /* The one field this action exists to change, and the only one it
-       may touch. An empty string is legitimate — that's how the badge
-       gets hidden when there's no date to give yet — so this doesn't
-       go through requireSafeText(), which rejects empty. */
-    if (typeof payload.next !== "string") bad("next must be a string");
-    const next = payload.next.trim();
-    if (next.length > MAX_TEXT_LEN) bad(`next is longer than ${MAX_TEXT_LEN} characters`);
-    if (!SAFE_TEXT.test(next)) {
-      bad("next contains characters that aren't allowed (letters, numbers and basic punctuation only)");
-    }
-    out.next = next;
+       may touch. Same date rule as an advance — a deadline set here
+       and a deadline set by an advance have to be stored identically,
+       or the heads-up would work after one and not the other.
+
+       An empty string stays legitimate: that's how the badge gets
+       hidden when there's no date to give yet. */
+    const rawAt = payload.nextAt !== undefined ? payload.nextAt : payload.next;
+    if (rawAt === undefined) bad("deadline requires a date");
+    out.nextAt = parseDeadlineField(rawAt);
   }
 
   return out;
@@ -294,31 +330,38 @@ function doScores(p, L) {
    Scheduling slips. Somebody's out Tuesday, the sim gets pushed to
    Thursday, and until now the only way to say so on the site was to
    run an advance — which also bumps the week and pings the whole
-   Discord. This writes nextAdvance and nothing else, and deliberately
-   posts nowhere: a date that moves twice in a week shouldn't ping
-   sixteen people twice in a week. The badge on the site is the
-   announcement.
+   Discord. This writes the deadline and nothing else, and
+   deliberately posts nowhere: a date that moves twice in a week
+   shouldn't ping sixteen people twice in a week. The badge on the
+   site is the announcement.
+
+   It writes the same PAIR an advance does — the timestamp and the
+   sentence generated from it — so a deadline moved here is just as
+   readable to the advance-day heads-up as one set by an advance.
+   Moving the date and having the morning post go quiet because of it
+   would be the worst possible failure for this particular feature.
    ------------------------------------------------------------ */
 function doDeadline(p, L) {
   const data = loadData(L.paths);
   const was = data.SEASON.nextAdvance || "";
+  const now = p.nextAt ? Deadline.formatDeadline(p.nextAt) : "";
 
-  const changed = updateNextAdvance(L.paths.league, p.next);
+  const changed = updateNextAdvance(L.paths.league, p.nextAt);
 
   if (!changed) {
-    console.log(`\n  ${L.dir}/league-data.js already said "${p.next}". Nothing to write.\n`);
+    console.log(`\n  ${L.dir}/league-data.js already said "${now}". Nothing to write.\n`);
     return { changed: false };
   }
 
   console.log(
-    `\n  ${L.label} deadline by ${p.actor}: "${was}" → "${p.next}" ` +
+    `\n  ${L.label} deadline by ${p.actor}: "${was}" → "${now}" ` +
       `(still on ${weekLabel(Number(data.SEASON.currentWeek) || 0).toLowerCase()})\n`
   );
 
   return {
     changed: true,
-    commit: `${L.label}: deadline → ${p.next || "(cleared)"} (via ${p.actor})`,
-    summary: `Deadline changed from "${was}" to "${p.next || "(cleared)"}"`,
+    commit: `${L.label}: deadline → ${now || "(cleared)"} (via ${p.actor})`,
+    summary: `Deadline changed from "${was}" to "${now || "(cleared)"}"`,
   };
 }
 
@@ -337,10 +380,13 @@ async function doAdvance(p, L) {
   const status = p.status || `WEEK ${p.week}`;
 
   /* Carry the existing deadline over when none was given, matching
-     advance.js's behaviour rather than blanking the badge. */
-  const next = p.next === undefined ? data.SEASON.nextAdvance : p.next;
+     advance.js's behaviour rather than blanking the badge. `at` is
+     what gets stored; `next` is the generated sentence, used for the
+     Discord message and the run summary. */
+  const at = p.nextAt === undefined ? data.SEASON.nextAdvanceAt ?? "" : p.nextAt;
+  const next = at ? Deadline.formatDeadline(at) : "";
 
-  const changed = updateSeason(L.paths.league, p.week, status, next);
+  const changed = updateSeason(L.paths.league, p.week, status, p.nextAt);
 
   const wk = buildWeek(data, p.week);
   console.log(

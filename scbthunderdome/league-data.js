@@ -22,9 +22,26 @@
    posted, which is why every team header in them still reads
    0-0 (0-0); the score is recorded in schedule-data.js regardless.
 
-   nextAdvance is the only real-world date on the site. Blank hides
-   the countdown line entirely rather than showing a stale deadline
-   — better than a guess until the commissioner sets one.
+   THE ADVANCE DEADLINE is the only real-world date on the site, and
+   it's stored twice — but only one of the two is authored:
+
+     nextAdvanceAt  the real value, an ISO timestamp with an
+                    explicit Eastern offset
+     nextAdvance    the sentence coaches read, GENERATED from it
+
+   The admin page and advance.js write the pair together, so don't
+   hand-edit either one. If they ever disagree, nextAdvanceAt is
+   right and the next advance will correct the text.
+
+   The timestamp exists because free text can't be computed with,
+   and the advance-day heads-up (tools/heads-up.js) has to answer
+   "is the advance today?" every morning before it decides whether
+   to post next week's H2H matchups. /deadline.js does the
+   conversion both ways and explains the Eastern rule.
+
+   Both blank hides the countdown line entirely rather than showing
+   a stale deadline — better than a guess until the commissioner
+   sets one.
    ------------------------------------------------------------ */
 const SEASON = {
   // In-game year for this season's data. Governs the seasons/<year>/
@@ -33,6 +50,7 @@ const SEASON = {
 
   currentWeek: 4,
   statusLine: "WEEK 4",
+  nextAdvanceAt: "2026-08-13T23:00:00-04:00",
   nextAdvance: "Thursday, August 13th — 11:00 PM EDT",
 };
 

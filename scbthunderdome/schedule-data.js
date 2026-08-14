@@ -99,7 +99,7 @@ const TEAM_SCHEDULES = [
       { week: 2, opponent: "FCS Midwest", location: "vs", teamScore: 45, opponentScore: 23 },
       { week: 3, opponent: "Louisville", location: "at", teamScore: 49, opponentScore: 21 },
       { week: 4, opponent: "Missouri State", location: "vs", teamScore: 73, opponentScore: 20 },
-      { week: 5, opponent: "Boston College", location: "vs" },
+      { week: 5, opponent: "Boston College", location: "vs", teamScore: 59, opponentScore: 14 },
       { week: 6, note: "BYE" },
       { week: 7, opponent: "Virginia", location: "vs" },
       { week: 8, opponent: "California", location: "vs" },

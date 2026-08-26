@@ -61,4 +61,5 @@
 
 const VACATIONS = [
   { coach: "Jake", start: "2026-08-27", end: "2026-08-30", added: "2026-08-26" },
+  { coach: "Jake", start: "2026-09-01", end: "2026-09-07", added: "2026-08-26" },
 ];

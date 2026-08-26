@@ -63,6 +63,25 @@ const restored = new Map();
 
 const $ = (id) => document.getElementById(id);
 
+/* Where the league sits on the 0-19 week axis.
+
+   `currentWeek` is a number or one of two sentinels, and THE TWO DO
+   NOT COERCE ALIKE. The plain `Number(x) || 0` this replaces sent
+   both to 0 — right for the preseason, where nothing has happened,
+   and wrong for the offseason, where everything has. A 0 there points
+   the week pickers and the gap scan at the season opener one advance
+   after the national championship.
+
+   Mirrors seasonIndex() in script.js and tools/lib/league.js. Three
+   copies because the browser, the site and Node don't share a module
+   system; if you change one, change all three. */
+const seasonIndex = (value) => {
+  if (value === "PRESEASON") return 0;
+  if (value === "OFFSEASON") return 19;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
 const esc = (s) =>
   String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
@@ -203,6 +222,13 @@ $("signin-form").addEventListener("submit", async (e) => {
       .join("");
 
     await switchLeague(who.leagues[0]);
+
+    /* Not awaited. The vacation list is the least important thing on
+       this page and it reads the roster file to draw its chips;
+       blocking sign-in on that would make the whole page feel slower
+       to somebody who came here to enter one score. It fills itself
+       in a moment later, and says so if it can't. */
+    renderVacations();
   } catch (err) {
     message($("signin-msg"), "error", err.message);
   } finally {
@@ -229,6 +255,8 @@ $("signout-btn").addEventListener("click", () => {
   message($("scores-msg"), "");
   message($("advance-msg"), "");
   message($("deadline-msg"), "");
+  message($("vacation-msg"), "");
+  $("vacation-list").innerHTML = "";
 });
 
 /* ------------------------------------------------------------
@@ -279,23 +307,33 @@ async function switchLeague(slug) {
    confirmed advance can refresh the page from the published file
    without re-fetching or resetting the league. */
 function refreshWeekControls() {
-  const current = Number(data.SEASON.currentWeek) || 0;
+  const current = seasonIndex(data.SEASON.currentWeek);
 
-  const opts = [];
-  for (let w = 0; w <= 15; w++) {
-    opts.push(`<option value="${w}">${esc(weekOptionLabel(w))}</option>`);
-  }
-  $("week-select").innerHTML = opts.join("");
-  $("week-select").value = String(current);
+  /* ONE RANGE NOW, 0-19. Both pickers run the full season.
 
-  $("advance-week").innerHTML = opts.join("");
-  $("advance-week").value = String(Math.min(current + 1, 15));
+     They used to differ: scores stopped at 15 because a bowl week had
+     no schedule rows to write into, and playoff results lived only in
+     postseason-data.js. That changed — a postseason game involving a
+     coached team is stored in that team's own schedule rows, exactly
+     like every other game they play, and only CPU-vs-CPU games (which
+     no coach can report anyway) stay in postseason-data.js.
 
-  /* Both sets of pickers are prefilled from the stored timestamp, not
-     from the sentence — the sentence is generated and can't be parsed
-     back reliably. Seeded rather than left blank so the fields read
-     as "here is the deadline, change it" instead of as an unset
-     deadline. */
+     So weeks 16-19 have rows, and the score picker has to reach them
+     or a coach's bowl game can't be entered from the web at all. */
+  const opt = (w) => `<option value="${w}">${esc(weekOptionLabel(w))}</option>`;
+  const weekOpts = [];
+  for (let w = 0; w <= 19; w++) weekOpts.push(opt(w));
+
+  $("week-select").innerHTML = weekOpts.join("");
+  $("week-select").value = String(Math.min(current, 19));
+
+  $("advance-week").innerHTML = weekOpts.join("");
+  $("advance-week").value = String(Math.min(current + 1, 19));
+
+  /* Prefill from the stored timestamp, not from the sentence — the
+     sentence is generated and can't be parsed back reliably. A league
+     whose deadline predates this change simply starts blank, which is
+     honest: it has no machine-readable deadline yet. */
   const picker = Deadline.toPickerFields(data.SEASON.nextAdvanceAt);
   $("advance-date").value = picker.date;
   $("advance-time").value = picker.time;
@@ -353,13 +391,13 @@ function renderGames() {
     return;
   }
 
-  /* Split into what's left and what's done, and put what's left on
-     top. On a 10+ game week most of the list is finished, and the
-     old schedule-order interleaving meant hunting through finished
-     games to find the blanks. The original index travels with each
-     game in the data attributes, so collect() and the edit handlers
-     still address games by their real index no matter how the DOM is
-     ordered here. */
+  /* Split into what's left, what's done, and what's mid-save, and put
+     what's left on top. On a 10+ game week most of the list is
+     finished, and the old schedule-order interleaving meant hunting
+     through finished games to find the blanks. The original index
+     travels with each game in the data attributes, so collect() and
+     the edit handlers still address games by their real index no
+     matter how the DOM is ordered here. */
   const todo = [];
   const done = [];
   const saving = [];
@@ -377,12 +415,6 @@ function renderGames() {
   });
 
   let html = "";
-
-  if (saving.length) {
-    html +=
-      `<div class="group-head">Saving <span class="group-count">${saving.length}</span></div>` +
-      saving.map(({ g, i }) => gameHtml(g, i, week)).join("");
-  }
 
   if (todo.length) {
     html +=
@@ -404,6 +436,16 @@ function renderGames() {
       `<div class="entered-body">` +
       done.map(({ g, i }) => gameHtml(g, i, week)).join("") +
       `</div></details>`;
+  }
+
+  /* Mid-save games go last, right above the Save scores button. With
+     a long week the button is well below the fold, so the games being
+     saved need to sit next to it rather than up top where they'd be
+     out of view by the time the save actually completes. */
+  if (saving.length) {
+    html +=
+      `<div class="group-head">Saving <span class="group-count">${saving.length}</span></div>` +
+      saving.map(({ g, i }) => gameHtml(g, i, week)).join("");
   }
 
   host.innerHTML = html;
@@ -456,7 +498,7 @@ function renderGames() {
    normal state, not something to chase.
    ------------------------------------------------------------ */
 function findGaps() {
-  const current = Number(data.SEASON.currentWeek) || 0;
+  const current = seasonIndex(data.SEASON.currentWeek);
   const viewing = Number($("week-select").value);
   const out = [];
 
@@ -1048,7 +1090,7 @@ $("advance-btn").addEventListener("click", () => {
   }
   const next = deadline.text;
 
-  const current = Number(data.SEASON.currentWeek) || 0;
+  const current = seasonIndex(data.SEASON.currentWeek);
   const wk = WeekCore.buildWeek(data, week);
 
   let warn = "";
@@ -1223,6 +1265,141 @@ $("deadline-btn").addEventListener("click", async () => {
   } catch (err) {
     message(msg, "error", err.message);
   } finally {
+    btn.disabled = false;
+  }
+});
+
+
+/* ============================================================
+   VACATIONS
+   ------------------------------------------------------------
+   The one panel on this page that isn't scoped to the league
+   picker, because a vacation isn't scoped to a league. /vacations.js
+   is a flat list of people and dates; which dynasties an entry
+   reaches is DERIVED by matching the name against each league's own
+   COACHES array, here and in tools/nudge.js and on /vacation/, from
+   the same function in /vacation-core.js. Nothing league-shaped is
+   ever stored, so nothing can drift.
+
+   Coaches add their own at /vacation/ with no code. This panel is
+   only the other direction — taking one back off — which needs a
+   code and therefore can only happen here. A coach who merely wants
+   to CHANGE their dates should resubmit on the public page:
+   overlapping dates replace the old set on their own, so a
+   commissioner doesn't have to be in the loop for the common edit.
+   ============================================================ */
+const VACATION_FILE = "../vacations.js";
+
+/* Roster names per league, so an entry can be labelled with the
+   dynasties it actually reaches. Fetched once per sign-in — the
+   rosters don't change while somebody is entering scores. */
+let vacationRosters = null;
+
+async function loadVacationRosters() {
+  if (vacationRosters) return vacationRosters;
+
+  const leagues = typeof SITE_LEAGUES !== "undefined" ? SITE_LEAGUES : [];
+  const results = await Promise.allSettled(
+    leagues.map(async (meta) => {
+      const src = await fetchText(`../${meta.dir}/league-data.js`, false);
+      const { COACHES } = new Function(`${src}\nreturn { COACHES };`)();
+      return { meta, coaches: COACHES || [] };
+    })
+  );
+
+  vacationRosters = results
+    .filter((r) => r.status === "fulfilled")
+    .map((r) => ({
+      label: r.value.meta.label.replace(/ Dynasty$/, ""),
+      names: new Set(VacationCore.rosterNames(r.value.coaches).map(VacationCore.key)),
+    }));
+
+  return vacationRosters;
+}
+
+async function loadVacationList() {
+  /* Cache-busted, like every other read this page does of a file it
+     may have just changed. Without it a removal looks like it didn't
+     take, because the CDN keeps handing back the old list. */
+  const src = await fetchText(VACATION_FILE, true);
+  const { VACATIONS } = new Function(`${src}\nreturn { VACATIONS };`)();
+  return VacationCore.normalise(VACATIONS || []);
+}
+
+function vacationRowHtml(v, day, rosters) {
+  const now = VacationCore.isActive(v, day);
+  const where = rosters.filter((r) => r.names.has(VacationCore.key(v.coach))).map((r) => r.label);
+
+  return `
+    <div class="vac-row">
+      <span class="vac-row-who">${esc(v.coach)}</span>
+      <span class="vac-row-when">${esc(VacationCore.formatRange(v))}</span>
+      ${now ? `<span class="vac-row-now">away now · back ${esc(VacationCore.backOn(v))}</span>` : ""}
+      <span class="vac-row-where">${esc(where.length ? where.join(" · ") : "not on a roster")}</span>
+      <button class="btn btn-quiet" type="button" data-vac-remove
+              data-coach="${esc(v.coach)}" data-start="${esc(v.start)}" data-end="${esc(v.end)}"
+              style="padding:6px 12px;font-size:12px;">Remove</button>
+    </div>`;
+}
+
+async function renderVacations() {
+  const host = $("vacation-list");
+  if (!host) return;
+  host.innerHTML = `<p class="hint">Loading&hellip;</p>`;
+
+  try {
+    const [list, rosters] = await Promise.all([loadVacationList(), loadVacationRosters()]);
+    const day = VacationCore.today();
+
+    /* Anything already over is hidden rather than listed. A finished
+       vacation affects nothing and there is nothing to decide about
+       it; the file keeps it for six months so the history is there
+       if a force win is ever questioned, but this panel is a list of
+       things a commissioner might still want to act on. */
+    const live = list.filter((v) => !VacationCore.isPast(v, day));
+
+    host.innerHTML = live.length
+      ? live.map((v) => vacationRowHtml(v, day, rosters)).join("")
+      : `<p class="hint">Nobody has a vacation on file.</p>`;
+  } catch (err) {
+    host.innerHTML = "";
+    message($("vacation-msg"), "error", `Couldn't load the vacation list — ${err.message}`);
+  }
+}
+
+/* Delegated, because the rows are replaced wholesale on every
+   render and per-row listeners would leak with them. */
+$("vacation-list").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-vac-remove]");
+  if (!btn) return;
+
+  const entry = {
+    coach: btn.dataset.coach,
+    start: btn.dataset.start,
+    end: btn.dataset.end,
+  };
+
+  const msg = $("vacation-msg");
+  btn.disabled = true;
+  message(msg, "warn", `Removing ${entry.coach}, ${VacationCore.formatRange(entry)}…`);
+
+  try {
+    await api("/submit", {
+      code: accessCode,
+      payload: { action: "vacation", op: "remove", ...entry },
+    });
+
+    /* The write is a GitHub Actions run, so the file this page reads
+       won't have changed yet. Say what happened and re-read shortly,
+       rather than optimistically dropping the row and leaving the
+       page disagreeing with the repo if the run fails. */
+    message(msg, "warn", "Sent. Waiting for the site to publish…");
+    setTimeout(async () => {
+      await renderVacations();
+      message(msg, "ok", `Removed ${entry.coach}, ${VacationCore.formatRange(entry)}.`);
+    }, 45000);
+  } catch (err) {
+    message(msg, "error", err.message);
     btn.disabled = false;
   }
 });

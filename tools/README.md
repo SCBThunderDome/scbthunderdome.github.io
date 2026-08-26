@@ -136,9 +136,9 @@ of itself.
 
 **Discord only sends a notification for mentions in the message body.**
 A mention inside an embed renders blue but pings nobody. That's why the
-role ping and the H2H matchups live in the plain `content` field
-while the CPU list sits in the embed — the pings have to be where they
-actually fire.
+role ping, the H2H matchups and the CPU games live in the plain
+`content` field while the bye list sits in the embed — the pings have to
+be where they actually fire.
 
 **Mentions need numeric IDs, not usernames.** `@dwayinspired` is inert
 text. The real thing is `<@123456789012345678>`. To get an ID: Discord
@@ -160,13 +160,34 @@ config, which means nothing else in the message can ever ping — a stray
 **A channel ID is not a ping.** `<#123...>` renders a clickable link to
 the channel and notifies nobody. The script won't accept one as a
 mention. Channel-wide pings only come from `@everyone`, `@here`, or a
-role — set via `roleMention` in the config, both fields blank for none.
+role.
 
-Because there's no blanket ping configured, **every coach with a game
-that week is mentioned individually in the message body** — H2H games
-and CPU games alike. That's deliberate: if CPU games sat in the embed
-where they'd look neater, the ~18 coaches playing CPU opponents would
-get no notification at all.
+**The role ping is per league.** Each league has its own Discord server,
+and a role snowflake only exists on the server that owns it — main's
+role ID pasted into the 3-star server renders as a dead
+`@unknown-role` and pings nobody. So each league carries its own
+`roleMention` inside its `leagues` entry:
+
+```json
+"leagues": {
+  "scbthunderdome": { "webhookUrl": "..." }
+}
+```
+
+The top-level `roleMention` is only a fallback for a league that doesn't
+set its own. Blank a league's `id` to drop its channel-wide ping.
+
+The advance therefore pings twice over: **the role at the top catches
+everyone in the league**, and **every coach with a game that week is
+also mentioned individually** — H2H and CPU alike. The individual
+mentions still matter because they tell a coach which line is theirs;
+the role ping is what covers the people a game list can't reach, namely
+anyone on a **BYE**. That's why byes can stay in the embed as reference
+material: the deadline still reaches them through the role.
+
+The **nudge** deliberately does *not* use the role ping — it's aimed at
+the few coaches who still owe a game, and blasting the whole role every
+few days is how a reminder gets muted.
 
 The body has a hard 2000-character ceiling. Every week of the current
 season lands between 195 and 1280, so there's comfortable headroom, but
@@ -236,6 +257,42 @@ to be awake isn't a reminder.
 
 It gets `tools/config.json` from the `DISCORD_CONFIG` repo secret, the
 same way `league-update.yml` does. Nothing else to set up.
+
+### Vacations
+
+The nudge also reads `/vacations.js`, the central vacation tracker that
+replaced the Google Form. Two things appear, and only when somebody on
+*this* league's roster is away today:
+
+- a **⛱ beside their name** in the still-to-play list, which is the line
+  a commissioner is actually reading when deciding whether an unplayed
+  game is a no-show or a force win, and
+- an **`On Vacation` section** at the bottom, naming them and saying
+  when they're back.
+
+**They are named, not tagged.** The game is still unplayed and the list
+still has to be complete — a missing row would read as "already played"
+— but a coach on vacation appears as bold plain text rather than a
+mention, so the morning post doesn't ping them. A mention is a demand,
+and sending one every day to somebody who has already told the league
+they're away is how a reminder bot gets muted, which breaks it for the
+twenty people it *was* aimed at. Nothing has to be removed from
+`allowed_mentions` to make that work: a name that was never written as
+`<@id>` can't notify anyone.
+
+**Nothing about leagues is stored on a vacation.** The tracker is one
+flat list of people and dates, because a vacation is a fact about a
+human — Salzy plays in the 1-star and the 3-star, and when he's away
+he's away from both. Which nudges mention it is worked out here, by
+`activeForRoster()` in `/vacation-core.js`, from that league's own
+`COACHES` array. So a coach submits once, it lands in every dynasty they
+play in and none they don't, and there is nothing to keep in sync.
+
+Coaches add their own at **`/vacation/`** on the site — no code, same as
+the old form — which posts to the Worker's open `/vacation` route and
+comes back through `apply.js` like any other submission. Removing one
+needs a commissioner code. The full write path is documented in the
+header of `/vacations.js`.
 
 ### The two silences
 
@@ -346,6 +403,78 @@ already work out.
 | `--dry-run` | Print the message. Post nothing. |
 | `--force` | Post even when it isn't advance day. Testing only — the message then states the real deadline rather than saying "later today", because on a forced run that isn't true. |
 | `--now ISO` | Pretend it's another moment, e.g. `--now "2026-08-13T14:00:00Z"`. Testing only. |
+
+`--now` plus `--dry-run` is how you check an advance day without waiting
+for one.
+
+### No role ping
+
+Same reasoning as the nudge: this is aimed at the handful of people with
+a game to arrange, not at the league. The advance announcement a few
+hours later carries the role and tells everyone the week moved. Pinging
+the whole server twice in one day is how a bot gets muted.
+
+That one workflow runs both morning posts — the nudge, then
+`heads-up.js`. They share a cron because they share a checkout, a copy
+of the Discord config and a schedule; a second workflow would have meant
+a second of each, including a second cron to remember to shift when
+daylight saving ends.
+
+**`force` and `headsup_force` are separate tickboxes**, and that split
+exists because sharing one wasn't. Forcing the nudge just skips a quiet
+window. Forcing the heads-up makes it post on a day that isn't an
+advance day — an assertion about the calendar that the league can check
+against reality. Leave `headsup_force` off unless you specifically want
+that.
+
+Writes nothing, commits nothing, touches the network only for the
+webhook POST.
+
+## heads-up.js
+
+The advance-day "here's who you play next" post. On the morning of an
+advance, it lists **next** week's head-to-head matchups and tags the
+coaches in them, so two people have all day to agree a time instead of
+starting that conversation at 6 PM.
+
+```
+node tools/heads-up.js --dry-run
+node tools/heads-up.js
+```
+
+Like the nudge, you normally don't run this — the same
+**`.github/workflows/morning-posts.yml`** runs it at 10:00 AM Eastern,
+right after the nudge.
+
+### It posts on exactly one condition
+
+`SEASON.nextAdvanceAt` names a deadline that falls **today** in Eastern
+and **hasn't passed yet**. Everything else is silence, and the job log
+says which condition wasn't met:
+
+| Situation | Why nothing posts |
+|---|---|
+| No `nextAdvanceAt` | Nothing to compare against. |
+| Deadline another day | Not today's problem. |
+| Deadline already passed | The advance may have happened — the matchups would be the ones people are already playing. |
+| Preseason | No current week, so no next week. |
+| Next week past 15 | Bowl weeks come from the CFP bracket, not from a schedule this can read. |
+| No H2H games next week | An all-CPU week needs no coordinating. |
+
+That single condition is also why there's no "did I already post today"
+state anywhere. The cron is daily and the test is a calendar date, so it
+stays stateless — which matters, because the alternative is giving a
+read-only job write access to the repo just to remember something it can
+already work out.
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--league SLUG` | `scbthunderdome` (the only league). Optional. |
+| `--dry-run` | Print the message. Post nothing. |
+| `--force` | Post even when it isn't advance day. Testing only — and note the message then states the real deadline rather than saying "later today", because on a forced run that isn't true. |
+| `--now ISO` | Pretend it's another moment, e.g. `--now "2026-08-11T14:00:00Z"`. Testing only. |
 
 `--now` plus `--dry-run` is how you check an advance day without waiting
 for one.
@@ -578,6 +707,276 @@ format above and runs this script. It's written to be followable by a
 cheap model, because transcription is the only thing it does; every
 judgement stays here. It won't commit, won't advance, and won't pass
 `--force` on its own.
+
+## cfp.js
+
+Writes a week's CFP Top 25 and projected 12-team bracket into
+`cfp-data.js`, and from Bowl Week 1 writes playoff results into
+`postseason-data.js`.
+
+```
+node tools/cfp.js --week 10 --poll poll.txt --bracket bracket.txt
+node tools/cfp.js --week 11 --poll poll.txt
+node tools/cfp.js --week 15 --bracket bracket.txt --final
+node tools/cfp.js --week 16 --results results.txt
+```
+
+**Two modes, split by week.** 10–15 is transcription: the poll and the
+bracket, published weekly — except that week 15 is bracket-only. Week 14
+is Army-Navy and the rankings don't move off that game, so week 15's
+poll IS week 14's; the site reads it through the at-or-before fallback
+in `script.js` instead of storing a duplicate block, and the advance
+gate won't ask you for one. Pass `--poll` at week 15 only if the
+rankings actually did move — a real block always wins over the
+fallback. 16–19 is results, and nothing else — the
+field settled at week 15 and a bowl week never writes another
+`CFP_BRACKET` block, because four identical copies of a field that
+stopped changing in December is noise rather than history.
+
+**The season has two halves.** Weeks 0–9 the game shows the AP Top 25
+and `top25.js` writes it. From week 10 it shows the CFP Top 25 plus a
+projected bracket, and this writes both. Same screenshot ritual, same
+guardrails, different file — `top25.js` refuses a week ≥ 10 and this
+one refuses a week < 10, so there's no way to put a poll in the wrong
+era by fumbling a flag.
+
+The two polls stitch into one timeline everywhere downstream: the `#N`
+schedule badges, the movement arrows, and strength of schedule all keep
+asking "what was the poll in week N" and get the right answer on either
+side of the boundary. The only user-facing difference is the name — the
+tab and the section retitle themselves to **CFP Top 25** — plus the
+bracket, which has no AP-era equivalent.
+
+`CFP_ERA_WEEK` is the boundary and it's stated in three places that must
+agree: `script.js`, `tools/lib/league.js`, and this script.
+
+### Poll input
+
+Identical to `top25.js` — 25 lines, rank, team, record.
+
+### Bracket input
+
+Twelve lines, seed, team, record, and an optional automatic-qualifier
+marker:
+
+```
+1 Ohio State 8-0
+4 Duke 8-0 *
+12 USF 8-0 *
+```
+
+The `*` is the in-game asterisk (a conference champion holding an
+automatic bid); `AQ` and `auto` are accepted too, and an asterisk glued
+to the team name works. It's display-only — the game has already moved
+the seed, and the site shows it only on the box where a team enters the
+bracket, not on every box it reaches afterwards.
+
+### Bowl names
+
+Optional directive lines, anywhere in the same bracket file:
+
+```
+qf: Cotton Bowl, Rose Bowl, Fiesta Bowl, Peach Bowl
+sf: Orange Bowl, Sugar Bowl
+nc: National Championship
+site: Las Vegas, NV
+```
+
+`qf` is four names **top to bottom**, matching the bracket you're
+reading; `sf` is two; `r1` is four if the game names the first-round
+sites. `site` is taken whole, commas and all. The counts are checked —
+a three-name `qf` line would otherwise leave one quarterfinal
+unlabelled, which looks like a design choice rather than a typo.
+
+**Enter each one once.** The site merges bowl names forward key by key,
+so quarterfinal bowls entered in week 10 keep showing when semifinal
+bowls arrive in week 13. They're a fact about the season, not the week,
+and re-entering them weekly is just another chance to typo one.
+
+**Don't transcribe the matchups.** The 12-team bracket's shape is
+fixed — seeds 1–4 bye, first round is 5v12 / 6v11 / 7v10 / 8v9 feeding
+4 / 1 / 3 / 2 — so the site draws the lines from the seed list. There
+is deliberately no second copy of the pairings that could disagree with
+the seeds. The script prints the derived bracket so it can be checked
+against the screenshot, which is the one thing the data can't check for
+itself: read a seed wrong and the wrong matchup is what makes it
+obvious.
+
+### Flags
+
+| Flag | Meaning |
+|---|---|
+| `--league SLUG` | `scbthunderdome` (the only league). Optional. |
+| `--week N` | Week this is for, 10–15. Required. |
+| `--poll PATH` | The 25 CFP Top 25 lines. |
+| `--bracket PATH` | The 12 seed lines. |
+| `--final` | This bracket is settled, not projected. |
+| `--dry-run` | Print the blocks and every check. Write nothing. |
+| `--allow-new` | Accept a team the league has never referenced. |
+| `--force` | Overwrite a week that already exists. |
+
+At least one of `--poll` / `--bracket` is required. Most weeks you pass
+both, because both screenshots come off the same screen.
+
+### Projected vs final
+
+`projected: true` is the honest label from week 10 through the
+conference championships — this is the field *if the season ended
+today*, and it moves every week. Run the bracket entered after the CCGs
+with `--final` and the panel stops saying PROJECTED.
+
+### Extra checks this one has
+
+Beyond everything `top25.js` does:
+
+- **Poll and bracket cross-check.** Every seed must appear in that
+  week's CFP Top 25, with the same record. A team in the bracket but
+  not the poll, or a record that disagrees between the two, means one
+  of the two screenshots was misread — and since they're the same
+  screen, that's a real catch.
+- **Movement is labelled by poll kind.** Week 10's only comparison is
+  the week 9 AP poll, so the report says so and suppresses the
+  big-move warnings: the committee's first ranking isn't the same
+  measurement as the AP's, and 15-spot swings there are normal rather
+  than suspicious.
+
+### The advance gate follows the game
+
+From week 10 the main dynasty's advance requires that week's CFP poll
+**and** bracket instead of the AP poll — the bracket is the headline of
+the tab by then, so advancing without it would publish a week with an
+empty playoff panel. A league that has never entered a CFP week isn't
+behind on it, so the first advance into the era is waved through and
+the gate engages from the following week.
+
+3-star and 1-star are not gated, same as the AP poll.
+
+### Bowl weeks 16-19
+
+The season doesn't end at the conference championships. The game plays
+four more weeks, one per playoff round, and calls them Bowl Week 1
+through 4 — so weeks 16, 17, 18 and 19 are the CFP first round,
+quarterfinals, semifinals and national championship.
+
+**Nothing gets transcribed in a bowl week.** The committee stops
+publishing, so the poll freezes at the week-14 block — the week-15
+seeding poll — and the site tags it `FINAL SEEDING · WEEK 15`; the bracket is already final by then. This
+script refuses a week above 15 and says so. What changes is results, and
+those go in `postseason-data.js` — the bracket fills itself in from
+them, round by round.
+
+The advance gate for weeks 16-19 asks for one thing: a **settled**
+bracket, meaning one entered with `--final`. Advancing into the first
+round on a projection would publish a field the games are about to
+contradict. It does **not** gate on results — `postseason-data.js` has
+no gate on it — a bracket screenshot that arrives an hour after the
+advance loses nothing, because it carries the whole bracket — and warns
+instead:
+
+```
+NOTE: CFP First Round: 3 of 4 results are in postseason-data.js.
+      The bracket will show the next round's slots empty until the rest are entered.
+```
+
+### Results input (weeks 16-19)
+
+One line per game. The round is spelled out in full, both teams are
+named, both scores are given:
+
+```
+cfp-r1: Oklahoma 31, Boise State 17
+cfp-qf: Miami 24, LSU 21
+```
+
+**Deliberately not the seed format.** A seed line ends in a record —
+`12 Boise State 9-2` — and a record and a score are the same regex
+shape. A results line that resembled one would read `31-17` as a
+record, or `9-2` as a score, and produce a bracket that looked
+plausible and was wrong. Teams by name rather than by seed for the same
+reason: a mis-read seed number attaches a score to the wrong school.
+
+**It writes CPU games only.** A game involving a coached team belongs
+to that coach's schedule and arrives through `scores.js` or the admin
+page like every other game they play; writing a second copy here is how
+the two start disagreeing. But the screenshot has that score in hand,
+so instead of ignoring it the tool compares:
+
+| | |
+|---|---|
+| schedule agrees | counted, listed, nothing written |
+| schedule disagrees | reported, nothing written — one of them was misread |
+| not entered yet | reported as outstanding |
+
+**The pairing check is the reason this is a tool and not a text
+editor.** The bracket's shape is fixed — 5v12 / 6v11 / 7v10 / 8v9
+feeding 4 / 1 / 3 / 2 — so first-round matchups are derivable from the
+settled field, and every later round from the winners before it,
+including winners already recorded in the file. A game between two
+teams who could not have met is refused. That matters because of how it
+fails otherwise: a wrong matchup doesn't error on the site, the bracket
+just quietly stops advancing past that slot.
+
+**Re-running is expected.** The in-game bracket shows every completed
+round every time, so each upload re-verifies the whole playoff for
+free, a missed week backfills itself, and running the same file twice
+writes nothing. A result that differs from one already recorded stops
+the run; `--force` is only for correcting a score you transcribed wrong
+earlier.
+
+### How the bracket fills in
+
+The bracket advances a slot by looking for a played game between two
+known teams in the `cfp-r1`, `cfp-qf`, `cfp-sf` and `cfp-nc` rounds —
+in the coach's schedule rows first, then in `postseason-data.js`. Those
+four ids are load-bearing: rename one and the bracket quietly stops
+filling past that round. A winner carries its seed, record and star
+forward, so a team looks the same in the title game as it did in the
+first round.
+
+Same renderer draws the week-10 projection and the finished bracket;
+there is no separate display mode to keep in sync.
+
+## rollover.js
+
+Archives a finished season and resets the folder for the next one.
+Once per league per year, at the end of the offseason hold.
+
+```
+node tools/rollover.js --dry-run
+node tools/rollover.js
+```
+
+**The order is the whole safety property.** It copies the five data
+files into `seasons/<year>/`, verifies the archive loads on its own,
+and only then touches anything live. A season's roster is part of its
+history — who coached which school in 2026 is the only way to render a
+2026 meeting correctly once someone changes teams — so editing the
+roster before archiving produces an archive that records coaches at
+schools they moved to a year later. Silently, permanently, with nothing
+to notice. Roster changes happen *after* this runs, against a folder
+that is already next season.
+
+It refuses outright if `seasons/<year>/` exists. Everything else is a
+warning you can pass with `--force`: an unfinished playoff or a
+`currentWeek` that isn't `"OFFSEASON"` is worth saying, but the
+commissioner knows things this script doesn't.
+
+**What carries forward:** the roster, whole, and the team and
+conference on each schedule. This is an online dynasty and coaches stay
+with their team; a coach changing schools is an exception handled by
+hand afterwards, not an annual migration.
+
+**What's cleared:** every team's `weeks` array (next season's opponents
+are a fresh in-game draw), the polls, the bracket and the postseason.
+
+**Departures become permanent.** `departedAfterWeek: N` is per-season
+and freezes into the archive, but the coach is still gone — so it's
+rewritten as `active: false`, which is the existing flag for exactly
+that state. No new vocabulary, and reinstating someone is still what
+the file already says it is: delete the flag.
+
+It deletes nothing. The archive is a copy and every live file it
+rewrites is in git, so a rollover you didn't mean is a revert.
 
 ## find-tools.cmd
 

@@ -4,7 +4,7 @@ One-time setup, ~20 minutes. Until you finish it the admin page
 loads but says it isn't connected to its server yet. Nothing else on
 the site is affected at any point.
 
-What you're setting up: a page at `scbthunderdome.github.io/admin/`
+What you're setting up: a page at `ncaalegends.github.io/admin/`
 where the 1-star and 3-star commissioners enter scores and advance
 weeks themselves, without installing anything and without a GitHub
 account.
@@ -21,7 +21,7 @@ JavaScript is a published token. So it asks the Worker, which holds
 the token and checks the caller's access code. The Worker doesn't
 edit files either; it triggers the **League update** workflow, which
 runs `tools/apply.js` → the same `scores.js` and `advance.js` you run
-locally. One set of file-editing logic, two ways to reach it.
+locally. One set of file-editing logic, three ways to reach it.
 
 The practical upshot: **nothing that comes through the web can do
 anything the command-line tools can't.** Same guardrails, same
@@ -35,9 +35,9 @@ The Worker needs permission to trigger the workflow.
 
 1. GitHub → **Settings** → **Developer settings** → **Personal access
    tokens** → **Fine-grained tokens** → **Generate new token**
-2. Name: `scb-thunderdome-admin`
+2. Name: `ncaa-legends-admin`
 3. **Repository access** → *Only select repositories* →
-   `SCBThunderDome/SCBThunderDome.github.io`
+   `ncaalegends/ncaalegends.github.io`
 4. **Permissions** → *Repository permissions* → **Contents: Read and
    write**. That one permission is what allows `repository_dispatch`.
    Leave everything else alone.
@@ -55,20 +55,25 @@ JSON to paste into Cloudflare and each person's individual code.
 
 ```
   Name (blank when you're done): Dave
-  Which leagues?  [1] SCB Thunderdome
-  (type one or more, e.g. 1): 1
-  Added Dave — SCB Thunderdome.
+  Which leagues?  [1] 1-Star  [2] 3-Star  [3] Main
+  (type one or more, e.g. 1  or  13  or  123): 1
+  Added Dave — 1-Star.
+
+  Name (blank when you're done): RekenCrew
+  Which leagues?  [1] 1-Star  [2] 3-Star  [3] Main
+  (type one or more, e.g. 1  or  13  or  123): 123
+  Added RekenCrew — 1-Star + 3-Star + Main.
 
   Name (blank when you're done):
 ```
 
-There is one league, so the answer is always `1`. The prompt is kept
-in this shape because it is what a second dynasty would slot into.
+Type one digit per league — `13` grants 1-Star and Main, `123` all
+three. Order doesn't matter.
 
 Press Enter on a blank name to finish, and it prints:
 
 ```json
-{"HP864-PZAMD-SGVT3-KWFZN":{"name":"Dave","leagues":["scbthunderdome"]},"EPK5G-7SZYR-AN2WM-EQ7CR":{"name":"Marcus","leagues":["scbthunderdome"]}}
+{"HP864-PZAMD-SGVT3-KWFZN":{"name":"Dave","leagues":["1star"]},"EPK5G-7SZYR-AN2WM-EQ7CR":{"name":"Marcus","leagues":["3star"]}}
 ```
 
 That whole line is the value for `ACCESS_CODES` in step 4. Underneath
@@ -86,23 +91,26 @@ existing JSON pasted in is always available.
 ### What the fields mean
 
 `name` is what appears in the commit message and the Actions log, so
-the history reads `SCB Thunderdome: Week 4 scores (via Dave)`. Use
+the history reads `1-Star Dynasty: Week 4 scores (via Dave)`. Use
 whatever you'd recognise at a glance.
 
-`leagues` is the authorisation. A code that doesn't list
-`scbthunderdome` can't do anything, and the Worker re-checks this on
-every request rather than trusting what the page sends. The only valid
-value today is `scbthunderdome`.
+`leagues` is the authorisation. A code listing only `1star` cannot
+touch 3-star, and the Worker re-checks this on every request rather
+than trusting what the page sends. Valid values are `1star`, `3star`
+and `main`.
 
 **One code per person, not per league** — that's what makes the audit
 trail meaningful and what lets you revoke one person without
-disrupting anyone else.
+disrupting anyone else. Someone who runs several leagues gets one code
+covering all of them.
 
-**The league can be both scored and advanced from the web.** An
+**All three leagues can be scored and advanced from the web.** A code
+listing `main`, `1star` or `3star` can do both for that league. An
 advance from the web posts the Discord week announcement itself — the
-same message `advance.cmd` posts locally. This depends on the
-`DISCORD_CONFIG` secret being set (step 4a below); without it an
-advance still updates the site but posts nothing.
+same message `advance.cmd` posts locally — so main is no longer held
+back. This depends on the `DISCORD_CONFIG` secret being set (step 4a
+below); without it an advance still updates the site but posts
+nothing.
 
 ### If you'd rather do it by hand
 
@@ -110,7 +118,7 @@ The format is just an object keyed by code:
 
 ```json
 {
-  "SOME-LONG-RANDOM-CODE": { "name": "Dave", "leagues": ["scbthunderdome"] }
+  "SOME-LONG-RANDOM-CODE": { "name": "Dave", "leagues": ["1star"] }
 }
 ```
 
@@ -124,7 +132,7 @@ hand on phones.
 
 1. Cloudflare dashboard → **Workers & Pages** → **Create** →
    **Create Worker**
-2. Name it `scb-thunderdome-admin`, deploy the default hello-world
+2. Name it `ncaa-legends-admin`, deploy the default hello-world
 3. **Edit code**, delete what's there, paste all of `admin-api.js`,
    **Deploy**
 
@@ -136,8 +144,8 @@ Worker → **Settings** → **Variables and Secrets**:
 |---|---|---|
 | `GITHUB_TOKEN` | Secret | the token from step 1 — also what the morning cron uses |
 | `ACCESS_CODES` | Secret | the JSON from step 2, all on one line |
-| `GITHUB_REPO` | Text | `SCBThunderDome/SCBThunderDome.github.io` |
-| `ALLOWED_ORIGINS` | Text | `https://scbthunderdome.github.io,http://localhost:8080` |
+| `GITHUB_REPO` | Text | `ncaalegends/ncaalegends.github.io` |
+| `ALLOWED_ORIGINS` | Text | `https://ncaalegends.github.io,http://localhost:8080` |
 
 Deploy again after adding these.
 
@@ -184,7 +192,7 @@ same empty result. In the meantime, Actions → **Morning posts** →
 Copy the Worker URL and paste it into `admin/admin.js`:
 
 ```js
-const ADMIN_API = "https://scb-thunderdome-admin.your-subdomain.workers.dev";
+const ADMIN_API = "https://ncaa-legends-admin.your-subdomain.workers.dev";
 ```
 
 Commit and push. Done.
@@ -194,12 +202,12 @@ Commit and push. Done.
 Test the Worker directly first — this needs no browser:
 
 ```
-curl -X POST https://scb-thunderdome-admin.<sub>.workers.dev/whoami \
+curl -X POST https://ncaa-legends-admin.<sub>.workers.dev/whoami \
   -H "Content-Type: application/json" \
   -d '{"code":"k3Jx9Qm2vLpR8tNwYc4hZA"}'
 ```
 
-Expected: `{"name":"Dave","leagues":["scbthunderdome"]}`
+Expected: `{"name":"Dave","leagues":["1star"]}`
 
 - `{"error":"That code wasn't recognised."}` — code doesn't match
   `ACCESS_CODES`, or the JSON didn't save as one line
@@ -238,6 +246,40 @@ submitted it. They'll just see the site not updating.
 That asymmetry is the one rough edge in this design. If it happens
 more than rarely, the fix is a status endpoint the page can poll —
 worth doing then, not worth building on spec.
+
+## The vacation route — the one door with no lock
+
+`POST /vacation` takes no access code. It is the only route on this
+Worker that doesn't, so it's worth knowing why.
+
+It backs `/vacation/` on the site, which replaced a Google Form that
+anyone with the link could fill in. The point of moving it into the repo
+was to make the answers readable by the site and the daily nudge — not
+to make thirty-odd people find a code before they can say they're away
+for a weekend. A tracker nobody can be bothered to update is worse than
+no tracker.
+
+What keeps it safe is what it can and can't do:
+
+- **It can only add.** `op` is hardcoded to `"add"` in the handler and
+  `apply.js` refuses a removal that came in self-service, so the same
+  rule is enforced twice, in two files.
+- **It can only name a real coach.** `apply.js` checks the submitted
+  name against the union of all three leagues' `COACHES` arrays. It
+  cannot be used to write arbitrary text into a file the site loads.
+- **It has its own rate limit** — four in ten minutes per IP, separate
+  from the code-guessing limiter, because every accepted submission
+  spends an Actions run.
+
+So the worst a stranger who finds the endpoint can do is claim a real
+coach is on holiday. That shows on the site within a minute, in the next
+morning's nudge, and any commissioner can remove it. If it ever becomes
+a nuisance, put the route behind one shared league password rather than
+issuing everybody a code.
+
+Commissioners remove a vacation through the normal `/submit` route with
+their own code, so a deletion is attributable in the commit history the
+same way a score is.
 
 ## Revoking access
 

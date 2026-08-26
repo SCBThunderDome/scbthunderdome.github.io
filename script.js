@@ -84,14 +84,43 @@ const INACTIVE_TEAM_KEYS = new Set(
   ROSTER_RAW.filter((c) => !isActiveCoach(c)).flatMap(_teamKeys)
 );
 
-/* Left mid-season -> team key -> last week they count as a league
-   team. Read by isLeagueTeam below. */
-const DEPARTED_TEAM_UNTIL = new Map();
-ROSTER_RAW.filter((c) => isActiveCoach(c) && hasDeparted(c)).forEach((c) => {
+/* Team key -> the windows in which that team is a league team, one
+   per coach who has held it. `[from, until]` closed on both ends:
+   `active: false` is [-Inf, -1] (no week qualifies), a mid-season
+   departure ends at its `departedAfterWeek`, a mid-season arrival
+   starts at its `joinedAtWeek`, and an ordinary coach is
+   [-Inf, Inf] and needs no flag.
+
+   A LIST, NOT A MERGED RANGE, because a team can change hands inside
+   one season and the weeks in between belong to nobody: Woogity left
+   Alabama after week 4 and Trick whitey took it over in week 11, so
+   weeks 5-10 were CPU and Miles's Week 6 win over Alabama must stay a
+   CPU win. A week counts if it falls inside ANY window. Windows that
+   abut still leave no dead week.
+
+   week-core.js makeResolver owns the authoritative version of this
+   rule; this mirrors it. */
+const TEAM_WINDOWS = new Map();
+ROSTER_RAW.forEach((c) => {
+  const until = !isActiveCoach(c) ? -1 : hasDeparted(c) ? Number(c.departedAfterWeek) : Infinity;
+  const from = c.joinedAtWeek != null ? Number(c.joinedAtWeek) : -Infinity;
   _teamKeys(c).forEach((k) => {
-    if (k) DEPARTED_TEAM_UNTIL.set(k, Number(c.departedAfterWeek));
+    if (!k) return;
+    if (!TEAM_WINDOWS.has(k)) TEAM_WINDOWS.set(k, []);
+    TEAM_WINDOWS.get(k).push({ from, until, coach: c });
   });
 });
+
+/* Which coach held this team in this week, if any. `week` omitted
+   means "today", which is what the roster grid and the dropdown ask.
+   Undefined for a CPU school, for a week in a gap between holders,
+   and for a departed team's later weeks. */
+function _holderAt(teamKey, week) {
+  const wins = TEAM_WINDOWS.get(teamKey);
+  if (!wins) return undefined;
+  const w = week === undefined ? Infinity : week;
+  return wins.find((x) => w >= x.from && w <= x.until);
+}
 
 /* ROSTER         the league as it stands now — cards, dropdown, live row
    ROSTER_HISTORY everyone whose games still count — name/colour lookups
@@ -99,11 +128,17 @@ ROSTER_RAW.filter((c) => isActiveCoach(c) && hasDeparted(c)).forEach((c) => {
                   goes, because their remaining weeks won't be played */
 const ROSTER = ROSTER_RAW.filter((c) => isActiveCoach(c) && !hasDeparted(c));
 const ROSTER_HISTORY = ROSTER_RAW.filter(isActiveCoach);
-const SCHEDULES = SCHEDULES_RAW.filter(
-  (t) =>
-    !INACTIVE_TEAM_KEYS.has(_inactiveKey(t.team)) &&
-    !DEPARTED_TEAM_UNTIL.has(_inactiveKey(t.team))
-);
+/* A schedule block is worth rendering when someone holds the team
+   TODAY. That drops an `active: false` coach's block and a departed
+   coach's block, whose remaining weeks won't be played — and keeps a
+   block whose team has since been handed to somebody new, which is
+   the case a plain "has this team ever been departed" test got
+   wrong. A school no coach has ever held has no windows at all and
+   was never in SCHEDULES_RAW's way to begin with. */
+const SCHEDULES = SCHEDULES_RAW.filter((t) => {
+  const key = _inactiveKey(t.team);
+  return !TEAM_WINDOWS.has(key) || !!_holderAt(key);
+});
 
 /* ------------------------------------------------------------
    TEAM NAME RESOLUTION
@@ -114,22 +149,11 @@ const SCHEDULES = SCHEDULES_RAW.filter(
      undecided roster entry  "Wake Forest / Oklahoma State"
 
    normalize() collapses case and spacing. rosterKeyFor() maps a
-   schedule name through the alias table. ROSTER_KEYS holds every
-   name the league occupies, with slash entries counted on both
+   schedule name through the alias table. Both feed TEAM_WINDOWS
+   above, which is keyed the same way and splits slash entries on both
    sides, so an undecided coach still gets league games tagged.
    ------------------------------------------------------------ */
 const normalize = (s) => String(s ?? "").trim().toLowerCase();
-
-// Every name a roster team answers to, slash entries split out.
-const ROSTER_KEYS = new Set();
-ROSTER.forEach((c) => {
-  String(c.team)
-    .split("/")
-    .forEach((part) => {
-      const k = normalize(part);
-      if (k) ROSTER_KEYS.add(k);
-    });
-});
 
 // Schedule name -> roster name, via the alias table when needed.
 function rosterKeyFor(scheduleName) {
@@ -145,14 +169,20 @@ function rosterKeyFor(scheduleName) {
 
    `week` is optional and means "as of that week". A coach who left
    after week 4 was a league opponent in weeks 0-4 and is CPU from
-   week 5, so a caller rendering a specific row should pass its week.
-   Omitting it asks about the league today, which is what the roster
-   grid and the dropdown want. */
+   week 5; a coach who took a team over in week 11 is CPU in weeks
+   0-10 and a league opponent from 11. Either way a caller rendering
+   a specific row should pass its week. Omitting it asks about the
+   league today, which is what the roster grid and the dropdown want.
+
+   There is no ROSTER_KEYS short-circuit any more, deliberately. A
+   coach who joined mid-season is a perfectly ordinary member of
+   ROSTER, so an early `return true` on roster membership would hand
+   them every one of their team's earlier CPU games as head-to-head —
+   and a team held by a departed coach AND a current one would answer
+   "yes" for the dead weeks in between. The window is the whole
+   answer. */
 function isLeagueTeam(scheduleName, week) {
-  const key = rosterKeyFor(scheduleName);
-  if (ROSTER_KEYS.has(key)) return true;
-  if (!DEPARTED_TEAM_UNTIL.has(key)) return false;
-  return week !== undefined && week <= DEPARTED_TEAM_UNTIL.get(key);
+  return !!_holderAt(rosterKeyFor(scheduleName), week);
 }
 
 // Teams that have actually submitted a schedule. Used only for
@@ -160,46 +190,229 @@ function isLeagueTeam(scheduleName, week) {
 const KNOWN_SCHEDULE_TEAMS = new Set(SCHEDULES.map((t) => t.team));
 
 /* ROSTER_HISTORY, not ROSTER: a departed coach's played games still
-   carry their name and colour. */
-function rosterEntryFor(scheduleName) {
+   carry their name and colour.
+
+   `week` matters for exactly one reason — a team that changed hands
+   mid-season has two roster entries, and the week decides which
+   coach's name goes on the row. Omitting it asks who holds the team
+   today, which is what a roster card, a poll row and a By Team header
+   want. When the week falls in a gap between holders the first entry
+   is the fallback, so a played row never loses its chip; the row is
+   tagged CPU by isLeagueTeam either way, which is the part that
+   decides whether the name is shown at all. */
+function rosterEntryFor(scheduleName, week) {
   const key = rosterKeyFor(scheduleName);
-  return ROSTER_HISTORY.find((c) =>
+  const matches = ROSTER_HISTORY.filter((c) =>
     String(c.team).split("/").some((part) => normalize(part) === key)
   );
+  if (matches.length < 2) return matches[0];
+  const held = _holderAt(key, week);
+  if (held && matches.includes(held.coach)) return held.coach;
+  return matches[0];
 }
 
-function coachFor(scheduleName) {
-  return rosterEntryFor(scheduleName)?.name || "";
+function coachFor(scheduleName, week) {
+  return rosterEntryFor(scheduleName, week)?.name || "";
 }
 
 // Falls back to gold for anyone without a color set.
-function colorFor(scheduleName) {
-  return safeHex(rosterEntryFor(scheduleName)?.color);
+function colorFor(scheduleName, week) {
+  return safeHex(rosterEntryFor(scheduleName, week)?.color);
 }
 
 /* ------------------------------------------------------------
-   TOP 25 (in-game AP poll)
+   TEAM FILL — the colour to paint a solid block of a school in
    ------------------------------------------------------------
-   The transcribed in-game poll, one frozen entry per week (see
-   top25-data.js). Two things read it: the Top 25 tab, and the "#N"
-   badges on schedules. A game in week N always shows a team's rank
-   from THAT week's poll, so a schedule reflects what a team was
-   ranked when the game was actually played — never a later poll.
-   Team names resolve through the same alias table as everything
-   else, so "Cal"/"California" and friends line up.
+   Distinct from colorFor() above, and deliberately so. A roster
+   `color` is an ACCENT — a 3px bar against a dark panel — and
+   several are brightened away from the school's real shade to stay
+   visible at that size. Painting a whole box in one gives a box that
+   glows. team-colors.js holds the true primary, chosen to be a
+   background. Both exist because they're different jobs.
+
+   Order: the shared table, then the table again under the league's
+   own alias for the school ("California" -> "Cal"), then the roster
+   accent as a last resort — which is what the 1-star dynasty's
+   invented schools use, since they have no real primary.
    ------------------------------------------------------------ */
+const TEAM_FILL_INDEX = new Map();
+Object.entries(typeof TEAM_COLORS !== "undefined" ? TEAM_COLORS : {}).forEach(([name, hex]) => {
+  const h = safeHex(hex);
+  if (h) TEAM_FILL_INDEX.set(normalize(name), h);
+});
+Object.entries(typeof TEAM_COLOR_ALIASES !== "undefined" ? TEAM_COLOR_ALIASES : {}).forEach(
+  ([from, to]) => {
+    const h = TEAM_FILL_INDEX.get(normalize(to));
+    if (h) TEAM_FILL_INDEX.set(normalize(from), h);
+  }
+);
+
+function fillFor(scheduleName) {
+  return (
+    TEAM_FILL_INDEX.get(normalize(scheduleName)) ||
+    TEAM_FILL_INDEX.get(rosterKeyFor(scheduleName)) ||
+    safeHex(rosterEntryFor(scheduleName)?.color) ||
+    ""
+  );
+}
+
+/* Which of the site's two text tones to put on a given fill.
+
+   COMPUTED, NOT STORED. A stored text colour is a second fact that
+   can disagree with the first; this one can't be wrong, because it
+   asks the only question that matters — which tone is actually more
+   readable on this background — and answers it with the WCAG
+   contrast ratio rather than a brightness threshold. A threshold has
+   to be tuned, and gets Carolina blue wrong in one direction and
+   Colorado gold wrong in the other. */
+const RELATIVE_LUMINANCE = (hex) => {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const ch = [0, 2, 4].map((i) => {
+    const c = parseInt(full.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+};
+const CONTRAST = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+
+const INK_LIGHT = "#f2f4f8"; // --chalk
+const INK_DARK = "#0b1526"; // --navy-deep
+const L_LIGHT = RELATIVE_LUMINANCE(INK_LIGHT);
+const L_DARK = RELATIVE_LUMINANCE(INK_DARK);
+
+function inkOn(hex) {
+  const L = RELATIVE_LUMINANCE(hex);
+  return CONTRAST(L, L_DARK) > CONTRAST(L, L_LIGHT) ? INK_DARK : INK_LIGHT;
+}
+
+/* ------------------------------------------------------------
+   THE WEEKLY POLL (AP through week 9, CFP from week 10)
+   ------------------------------------------------------------
+   The transcribed in-game poll, one frozen entry per week. Two
+   things read it: the Top 25 tab, and the "#N" badges on schedules.
+   A game in week N always shows a team's rank from THAT week's poll,
+   so a schedule reflects what a team was ranked when the game was
+   actually played — never a later poll. Team names resolve through
+   the same alias table as everything else, so "Cal"/"California" and
+   friends line up.
+
+   TWO SOURCES, ONE TIMELINE. The game runs the AP Top 25 through
+   week 9 (top25-data.js) and then switches to the CFP Top 25 from
+   week 10 (cfp-data.js). They are the same 25-row shape and they
+   never cover the same week, so the site stitches them into a single
+   week-keyed poll rather than carrying two parallel systems.
+
+   That is the whole reason the switchover is nearly free: badges,
+   movement arrows, strength-of-schedule and the Top 25 tab all keep
+   asking "what was the poll in week N" and get the right answer on
+   either side of the boundary. The ONLY thing that knows the
+   difference is what we call it — see pollKindForWeek() — and the
+   bracket, which has no AP-era equivalent.
+
+   CFP wins any week the two somehow both claim. A week 10 AP block
+   would mean a stale transcription; the CFP poll is what the game is
+   actually showing by then.
+   ------------------------------------------------------------ */
+/* The week the season stops being ranked by the AP poll and starts
+   being ranked by the CFP committee. One constant, referenced
+   everywhere — if the game ever moves the boundary, move it here. */
+const CFP_ERA_WEEK = 10;
+
+/* The last week with a schedule behind it — the conference
+   championships. After it come the game's four Bowl Weeks, one per
+   playoff round, whose games live in postseason-data.js instead.
+   Mirrors REGULAR_FINAL_WEEK in week-core.js; read from there when
+   it loaded, so the two can't drift, with the literal as the
+   fallback for a page where week-core failed to load. */
+const REGULAR_FINAL_WEEK =
+  (typeof WeekCore !== "undefined" && WeekCore.REGULAR_FINAL_WEEK) || 15;
+
+/* The last week that can hold a game — Bowl Week 4, the national
+   championship. Same mirror-with-a-fallback rule as the line above. */
+const FINAL_WEEK = (typeof WeekCore !== "undefined" && WeekCore.FINAL_WEEK) || 19;
+
+/* Which week a postseason round is played in. Mirrors roundWeek() in
+   week-core.js, with the same literal fallback the two constants
+   above use — the bracket is the headline of the Top 25 tab, and it
+   shouldn't go blank because a script tag loaded out of order. */
+const ROUND_WEEK_FALLBACK = {
+  ccg: 15,
+  "bowl-w1": 16,
+  "cfp-r1": 16,
+  "bowl-w2": 17,
+  "cfp-qf": 17,
+  "cfp-sf": 18,
+  "cfp-nc": 19,
+};
+const roundWeekOf = (roundId) =>
+  typeof WeekCore !== "undefined" && WeekCore.roundWeek
+    ? WeekCore.roundWeek(roundId)
+    : ROUND_WEEK_FALLBACK[roundId] || 16;
+
 const TOP25_DATA = typeof TOP25 !== "undefined" ? TOP25 : [];
+const CFP_POLL_DATA =
+  typeof CFP_POLL !== "undefined" && Array.isArray(CFP_POLL) ? CFP_POLL : [];
+const CFP_BRACKET_DATA =
+  typeof CFP_BRACKET !== "undefined" && Array.isArray(CFP_BRACKET) ? CFP_BRACKET : [];
+
+/* Every poll block on one timeline, AP first so CFP overwrites a
+   collision. Each carries `kind` so the renderer can title it. */
+const POLL_BLOCKS = new Map(); // week -> { week, teams, kind }
+TOP25_DATA.forEach((p) => {
+  if (p && p.week != null) POLL_BLOCKS.set(Number(p.week), { ...p, kind: "ap" });
+});
+CFP_POLL_DATA.forEach((p) => {
+  if (p && p.week != null) POLL_BLOCKS.set(Number(p.week), { ...p, kind: "cfp" });
+});
 
 // week number -> Map(rosterKey -> { rank, record })
 const POLL_BY_WEEK = new Map();
-TOP25_DATA.forEach((p) => {
+POLL_BLOCKS.forEach((p, week) => {
   const m = new Map();
   (p.teams || []).forEach((t) => {
     const k = rosterKeyFor(t.team);
     if (k) m.set(k, { rank: Number(t.rank), record: String(t.record ?? "") });
   });
-  POLL_BY_WEEK.set(Number(p.week), m);
+  POLL_BY_WEEK.set(week, m);
 });
+
+/* "ap" | "cfp" — what the poll for a given week actually is. Reads
+   the transcribed block rather than comparing the week to
+   CFP_ERA_WEEK, so a league that hasn't uploaded its week-10 CFP
+   poll yet still correctly describes week 9 as the AP poll instead
+   of mislabelling whatever is on screen. */
+const pollKindForWeek = (week) => POLL_BLOCKS.get(Number(week))?.kind || "ap";
+const pollLabelForWeek = (week) =>
+  pollKindForWeek(week) === "cfp" ? "CFP Top 25" : "Top 25";
+
+/* Retitle the Top 25 tab wherever it appears. Split out of
+   renderTop25 because the tab strip exists on pages that have no
+   Top 25 panel to render — /3star/pickem/ — and a strip that says
+   "TOP 25" on one page and "CFP TOP 25" on the next reads as a bug.
+
+   Matches on either the panel button (data-tab) or a link to the
+   tab (href ending #top25), so it works on both shapes without the
+   caller knowing which it's looking at. */
+function renderPollTabLabel() {
+  const tabs = document.querySelectorAll(
+    '.tab-btn[data-tab="top25"], .tab-btn[href$="#top25"]'
+  );
+  if (!tabs.length) return;
+
+  /* No polls at all: the league page drops the tab entirely in
+     pruneEmptyTabs(), so a shell page must drop its link too or it
+     would offer a route to a tab that no longer exists. */
+  if (!POLL_BLOCKS.size) {
+    tabs.forEach((el) => el.remove());
+    return;
+  }
+
+  const week = currentPollWeek();
+  if (week == null) return;
+  const name = pollLabelForWeek(week);
+  tabs.forEach((el) => { el.textContent = name; });
+}
 
 const pollWeeksAvailable = () => [...POLL_BY_WEEK.keys()].sort((a, b) => a - b);
 const latestPollWeek = () => {
@@ -217,8 +430,38 @@ const latestPollWeek = () => {
    the advance flips the week — the poll and the new week reveal
    together, never before. Falls back to the latest poll at or before
    the current week, and to null (nothing published) if none qualifies. */
-const currentSeasonWeek = () =>
-  SEASON.currentWeek === "PRESEASON" ? 0 : Number(SEASON.currentWeek) || 0;
+/* ------------------------------------------------------------
+   THE TWO SENTINELS
+   ------------------------------------------------------------
+   `currentWeek` is a number 0-19, or one of two strings marking the
+   gaps on either side of a season:
+
+     "PRESEASON"  the roster is set, week 0 hasn't kicked off
+     "OFFSEASON"  the title game is played; NIL, the portal, signing
+                  day and the rest run in Discord until the rollover
+
+   THEY DO NOT COERCE THE SAME WAY, AND THIS IS THE WHOLE POINT.
+
+   Every one of these call sites used to write `Number(x) || 0`, which
+   sends BOTH strings to 0 — correct for preseason, where nothing has
+   happened, and badly wrong for the offseason, where everything has.
+   A 0 there tells the poll cap, the schedule view and the rankings
+   that the season hasn't started, one advance after the national
+   championship: polls vanish, every result stops counting as recent,
+   and the site reads as though it were August again.
+
+   So the offseason maps to FINAL_WEEK — the season, complete. One
+   helper, used everywhere, instead of the coercion repeated in seven
+   places where six of them are right by luck.
+   ------------------------------------------------------------ */
+const seasonIndex = (value) => {
+  if (value === "PRESEASON") return 0;
+  if (value === "OFFSEASON") return FINAL_WEEK;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const currentSeasonWeek = () => seasonIndex(SEASON.currentWeek);
 const currentPollWeek = () => {
   const cap = currentSeasonWeek();
   const reached = pollWeeksAvailable().filter((w) => w <= cap);
@@ -228,6 +471,7 @@ const currentPollWeek = () => {
 /* A team's rank in a given week's poll, or null when it's unranked
    (or no poll exists for that week yet). */
 function rankForWeek(teamName, week) {
+  if (week == null || !Number.isFinite(Number(week))) return null;
   const m = POLL_BY_WEEK.get(Number(week));
   if (!m) return null;
   const e = m.get(rosterKeyFor(teamName));
@@ -241,16 +485,44 @@ function rankBadgeHtml(teamName, week) {
   return r ? `<span class="rank-badge">#${r}</span>` : "";
 }
 
+/* The newest poll at or before `week`, never past the poll the site
+   is currently showing. Null when no poll qualifies — the weeks
+   before a league's first poll of the season.
+
+   NOT EVERY WEEK HAS A POLL, AND THAT IS NORMAL.
+   The in-game poll stops after the week-15 seeding rankings: the four
+   Bowl Weeks that follow are played off a bracket, not a poll, and a
+   league can also sit on a week whose poll hasn't been transcribed
+   yet. A strict week-for-week lookup renders those games with no rank
+   at all, which reads as "neither of these teams was ranked" when the
+   truth is "no new poll came out." Falling back to the most recent
+   poll that existed at the time keeps the badge honest — it is still
+   the rank the team held when the game was played — and keeps the
+   conference championships and the whole playoff from going blank.
+
+   The cap at currentPollWeek() is the same no-leaking rule
+   badgeWeekFor relies on: a poll committed ahead of the advance (the
+   advance gate requires it) must stay invisible until the season
+   reaches its week. */
+function pollWeekAtOrBefore(week) {
+  const cap = currentPollWeek();
+  if (cap == null) return null;
+  const target = Math.min(Number(week), cap);
+  const reached = pollWeeksAvailable().filter((w) => w <= target);
+  return reached.length ? reached[reached.length - 1] : null;
+}
+
 /* Which poll a schedule row should read for its opponent badge. A
    game that's been played is frozen: it shows the rank the opponent
-   held in the week it was actually played. An unplayed (future) game
-   can't know that yet, so it tracks the opponent's CURRENT rank — the
-   current week's poll — and keeps updating until the game happens.
-   "Current" is the shown poll (currentPollWeek), so a poll uploaded
-   for a week the site hasn't advanced to yet never leaks into a badge
-   early. */
+   held in the week it was actually played — or, when that week has no
+   poll of its own, the most recent one that had been released by
+   then. An unplayed (future) game can't know that yet, so it tracks
+   the opponent's CURRENT rank — the current week's poll — and keeps
+   updating until the game happens. "Current" is the shown poll
+   (currentPollWeek), so a poll uploaded for a week the site hasn't
+   advanced to yet never leaks into a badge early. */
 function badgeWeekFor(played, gameWeek) {
-  return played ? gameWeek : currentPollWeek();
+  return played ? pollWeekAtOrBefore(gameWeek) : currentPollWeek();
 }
 
 /* ------------------------------------------------------------
@@ -509,6 +781,11 @@ function validateData() {
    WEEK HELPERS
    ------------------------------------------------------------ */
 const isPreseason = () => SEASON.currentWeek === "PRESEASON";
+const isOffseason = () => SEASON.currentWeek === "OFFSEASON";
+/* Neither sentinel is a week that can hold a game, so anything asking
+   "is there a matchup to show right now" asks this rather than testing
+   the two strings separately and forgetting one. */
+const isBetweenSeasons = () => isPreseason() || isOffseason();
 
 /* Two ways to name a week, used in different places.
 
@@ -522,10 +799,22 @@ function weekNum(week) {
   return `Week ${week}`;
 }
 
+/* Weeks 16-19 are the game's Bowl Weeks 1-4, one per playoff round.
+   Named for the round rather than the number here, because by then
+   "Bowl Week 3" means nothing to a reader and "CFP Semifinals" means
+   everything. The picker and Discord keep the numbered form — see
+   weekLabel() in week-core.js. */
+const CFP_ROUND_WEEK_NAME = {
+  16: "CFP First Round",
+  17: "CFP Quarterfinals",
+  18: "CFP Semifinals",
+  19: "National Championship",
+};
+
 function weekLabel(week) {
   if (week === 14) return "Army-Navy Week";
   if (week === 15) return "CCG Week";
-  return `Week ${week}`;
+  return CFP_ROUND_WEEK_NAME[week] || `Week ${week}`;
 }
 
 function gameRowKey(week, teamA, teamB) {
@@ -578,6 +867,12 @@ function buildWeekGames(week) {
       away,
       stadium: entry.stadium,
       league: isLeague,
+      /* Postseason fields, absent on a regular-season row. `neutral`
+         suppresses the home/away claim; `title` names the game where
+         the week number would otherwise go. */
+      neutral: entry.neutral === true,
+      title: entry.title || "",
+      round: entry.round || null,
       ...entryScores(entry),
     });
   });
@@ -625,6 +920,22 @@ function renderJumbotron() {
       <span class="jumbo-label">CURRENT STATUS</span>
       <span class="jumbo-preseason">PRESEASON</span>`;
     sub.textContent = "Kickoff starts once Week 0 goes live";
+    return;
+  }
+
+  /* The offseason is the mirror of the preseason and gets the same
+     treatment: no week to summarise, so say what phase it is instead
+     of computing a jumbotron over an empty week.
+
+     `statusLine` carries the detail. It's hand-edited free text, so
+     the nine in-game offseason steps — NIL, players leaving, four
+     weeks of portal, signing day, training, transfers — can each be
+     named there without any of them existing as a week number. */
+  if (isOffseason()) {
+    frame.innerHTML = `
+      <span class="jumbo-label">CURRENT STATUS</span>
+      <span class="jumbo-preseason">OFFSEASON</span>`;
+    sub.textContent = SEASON.statusLine || "The season is complete";
     return;
   }
 
@@ -688,14 +999,19 @@ function gameCardHtml(g, week) {
   const homeWon = g.played && g.homeScore > g.awayScore;
   const awayWon = g.played && g.awayScore > g.homeScore;
 
+  /* A named postseason game keeps its name in the footer even after
+     it's final — "Rose Bowl" is more use than "Final", and the score
+     directly above already says the game is over. */
+  const foot = g.title || (g.played ? "Final" : weekLabel(week));
+
   return `
     <article class="game-card${g.league ? " is-league" : ""}${
     g.played ? " is-final" : " is-upcoming"
-  }">
+  }${g.round ? " is-postseason" : ""}">
       ${gameRowHtml(g.away, g.played, awayWon, g.awayScore, week)}
       ${gameRowHtml(g.home, g.played, homeWon, g.homeScore, week)}
       <div class="gc-foot">
-        <span>${g.played ? "Final" : esc(weekLabel(week))}</span>
+        <span>${esc(foot)}</span>
         ${g.league ? '<span class="wg-league-tag">League</span>' : ""}
       </div>
     </article>`;
@@ -710,6 +1026,20 @@ function renderThisWeekGames() {
     tag.textContent = "PRESEASON";
     container.innerHTML =
       '<p class="sched-empty">Matchups will show up here once Week 0 kicks off.</p>';
+    return;
+  }
+
+  /* Offseason shows the season that just finished, not an empty week.
+     The national championship is the last thing that happened and the
+     most interesting thing the site has ever had on it; blanking the
+     panel for however long the offseason runs would throw that away
+     to say "nothing is scheduled". */
+  if (isOffseason()) {
+    const { rows } = buildWeekGames(FINAL_WEEK);
+    tag.textContent = "OFFSEASON";
+    container.innerHTML = rows.length
+      ? `<div class="game-grid">${rows.map((g) => gameCardHtml(g, FINAL_WEEK)).join("")}</div>`
+      : '<p class="sched-empty">The season is complete. Next season\'s schedule lands in the preseason.</p>';
     return;
   }
 
@@ -998,6 +1328,17 @@ function renderTop25() {
   const label = document.getElementById("top25-week-label");
   if (!host) return;
 
+  /* The BRACKET tracks the season's week, not the poll's.
+
+     They move together in practice — the advance gate wants both —
+     but tying the bracket to currentPollWeek() would mean a missing
+     poll silently blanks the playoff panel, which is the wrong
+     failure: the bracket is its own record and there is no reason a
+     week 14 bracket should disappear because week 14's 25 rows
+     haven't been typed yet. Rendered outside the early return below
+     for the same reason. */
+  renderCfpBracket(currentSeasonWeek());
+
   const week = currentPollWeek();
   if (week == null) {
     if (label) label.textContent = "NOT PUBLISHED YET";
@@ -1007,12 +1348,417 @@ function renderTop25() {
     return;
   }
 
-  const poll = TOP25_DATA.find((p) => Number(p.week) === week);
+  const poll = POLL_BLOCKS.get(week);
   const teams = poll ? [...poll.teams].sort((a, b) => Number(a.rank) - Number(b.rank)) : [];
 
-  if (label) label.textContent = `WEEK ${week}`;
+  /* From week 10 this is the committee's poll, not the AP's, and
+     saying so is the entire user-facing difference between the two
+     eras. The tab button retitles with it so the change is visible
+     without opening the tab. */
+  const name = pollLabelForWeek(week);
+  setText(document.getElementById("top25-title"), name);
+  renderPollTabLabel();
+
+  /* THE LAST POLL OF THE SEASON IS THE WEEK-15 SEEDING POLL, AND IT
+     COVERS THREE DIFFERENT-LOOKING SITUATIONS.
+
+     Week 14 is Army-Navy, and the rankings don't move off that game.
+     So week 15 never gets a block of its own \u2014 it reads week 14's,
+     through the same at-or-before fallback the schedule badges use \u2014
+     and the game publishes nothing further once the playoff starts.
+     One poll, captioned by where the SEASON is:
+
+       week 15        "WEEK 15"                  these are the
+                                                 championship-week
+                                                 rankings
+       weeks 16-19    "FINAL SEEDING \u00b7 WEEK 15"  the poll the bracket
+                                                 was built from; the
+                                                 prefix is what stops
+                                                 it reading as stale
+                                                 during Bowl Week 3
+
+     Both say 15, not the 14 the block is filed under. Numbering them
+     by the file would make the caption count BACKWARDS as the season
+     moves from championship week into the playoff, and would imply
+     the site was a week behind on an upload that is never coming.
+
+     Before week 15 the label is the poll's own week, deliberately.
+     3-star and 1-star don't gate their advances on the poll (see
+     top25GateError), so they really can sit on week 13 with week 12's
+     rankings up \u2014 and there the older number is the honest one. The
+     season's end is the single case where the gap is by design. */
+  const atSeasonEnd = currentSeasonWeek() >= REGULAR_FINAL_WEEK;
+  if (label) {
+    label.textContent =
+      currentSeasonWeek() > REGULAR_FINAL_WEEK
+        ? `FINAL SEEDING \u00b7 WEEK ${REGULAR_FINAL_WEEK}`
+        : `WEEK ${atSeasonEnd ? REGULAR_FINAL_WEEK : week}`;
+  }
   host.classList.remove("is-empty");
   host.innerHTML = teams.map((t) => top25RowHtml(t, week)).join("");
+}
+
+const setText = (el, s) => {
+  if (el) el.textContent = s;
+};
+
+/* ------------------------------------------------------------
+   CFP BRACKET
+   ------------------------------------------------------------
+   The projected 12-team field, drawn above the poll from week 10.
+
+   THE DATA IS TWELVE SEEDS. Nothing else is transcribed, because
+   nothing else is a fact about this season — the 12-team bracket's
+   shape is fixed, so the matchups are arithmetic on the seed list:
+
+     seeds 1-4    first-round bye, straight into a quarterfinal
+     first round  5v12, 6v11, 7v10, 8v9
+     each winner  meets the bye seed that completes 13 (12/5 -> 4,
+                  9/8 -> 1, 11/6 -> 3, 10/7 -> 2)
+
+   Deriving it means there is no second copy of the pairings that can
+   disagree with the seeds, which is the failure mode a hand-drawn
+   bracket actually has.
+
+   Slots fill in from postseason-data.js as the games get played, so
+   the same renderer draws the week-10 projection and the finished
+   bracket — no separate "results" mode to keep in sync. Until those
+   games exist every downstream box is simply blank, which is exactly
+   what the game shows too.
+
+   ------------------------------------------------------------
+   HOW IT'S LAID OUT
+   ------------------------------------------------------------
+   A real tree: every box is placed on a shared row grid, and each
+   box sits exactly halfway between the two boxes that feed it. That
+   half-step offset is the whole point — it's what lets you follow a
+   team rightward without tracing which of four same-height rows it
+   came from.
+
+   The grid is measured in HALF-SLOTS. A box is two rows tall, so
+   "centred between two boxes" is a whole number of rows rather than
+   a fraction, and the entire layout is integers:
+
+     first round   game i: rows 4i+1 and 4i+3        (i = 0..3)
+     quarterfinal  winner  4i+2  (centred on game i), bye 4i+4
+     semifinal     box     4i+3  (centred on qf group i)
+     final         rows 5 and 13
+     champion      row 9
+
+   Each rule is "centre of the pair below-left", applied again. 17
+   rows total, and nothing is positioned by hand or by eye.
+
+   THE CONNECTOR LINES are two pseudo-elements per box, not an SVG
+   overlay and not measured in JS. A box that receives draws the
+   elbow bracket in the gutter to its left (::before); a box that
+   feeds draws a short stub to its right (::after). The bracket's
+   height is `--drop`: the row distance to each of its two feeders,
+   which doubles each round (1, 1, 2, 4 row-pitches). Because every
+   box is exactly midway between its feeders, one symmetric bracket
+   centred on the box lands on both of them — no per-line maths.
+
+   Nothing here is measured after layout, so a long team name or a
+   late-loading font can't knock the lines out of alignment.
+   ------------------------------------------------------------ */
+/* [lower seed, higher seed] per first-round game, top to bottom, and
+   the bye seed each winner advances to meet. Index-aligned. */
+const CFP_R1_PAIRS = [[12, 5], [9, 8], [11, 6], [10, 7]];
+const CFP_BYE_FOR_R1 = [4, 1, 3, 2];
+
+const cfpBracketForWeek = (week) => {
+  const reached = CFP_BRACKET_DATA.filter((b) => Number(b.week) <= Number(week));
+  return reached.length ? reached[reached.length - 1] : null;
+};
+
+/* Bowl names, MERGED FORWARD KEY BY KEY rather than taken from the
+   newest bracket whole.
+
+   The assignments arrive at different times: the quarterfinal bowls
+   are named on the week-10 bracket, the semifinal bowls only show up
+   once the game is ready to name them. Taking the newest bracket's
+   `bowls` wholesale would mean the week the semifinals appear is the
+   week the quarterfinals go blank. Merging per key means each name
+   is entered once, on the first bracket that knows it, and stays. */
+const cfpBowlsFor = (week) => {
+  const out = {};
+  CFP_BRACKET_DATA.filter((b) => Number(b.week) <= Number(week))
+    .sort((a, b) => Number(a.week) - Number(b.week))
+    .forEach((b) => Object.assign(out, b.bowls || {}));
+  return out;
+};
+
+/* The winner of a postseason game between two known teams, or null if
+   that game hasn't been played (or isn't recorded yet). Round ids are
+   the ones documented in docs/seasons-and-postseason.md.
+
+   TWO SOURCES, AND A GAME IS ONLY EVER IN ONE OF THEM.
+
+   A playoff game involving a coached team is a row on that coach's
+   own schedule, entered through the ordinary score path like every
+   other game they play. A game between two teams nobody coaches —
+   most of the bracket, most seasons — has no schedule to live on and
+   sits in postseason-data.js.
+
+   So this is a union of disjoint sets, not a reconciliation between
+   two copies: there is no precedence rule to get wrong, because the
+   two places can never both hold the same game. Schedules are asked
+   first only because that's where a coach's own result lands, and a
+   coached game is the one someone is most likely to be watching for.
+
+   The payoff is that entering a quarterfinal score on the admin page
+   advances the bracket, with no second entry step. */
+function cfpGameWinner(roundId, a, b) {
+  if (!a || !b) return null;
+  const ka = rosterKeyFor(a);
+  const kb = rosterKeyFor(b);
+
+  const decide = (homeName, awayName, homeScore, awayScore) => {
+    if (homeScore == null || awayScore == null) return null;
+    if (Number(homeScore) === Number(awayScore)) return null; // no ties in the CFP
+    return Number(homeScore) > Number(awayScore) ? homeName : awayName;
+  };
+
+  /* 1. The schedules, at the week this round is played. A row only
+        counts if it names the round — two teams can meet twice in a
+        season, and "they played in week 17" is not the same claim as
+        "they played the quarterfinal". */
+  const week = roundWeekOf(roundId);
+  for (const team of SCHEDULES_RAW) {
+    const kt = rosterKeyFor(team.team);
+    if (kt !== ka && kt !== kb) continue;
+
+    for (const w of team.weeks || []) {
+      if (Number(w.week) !== week || w.round !== roundId || !w.opponent) continue;
+      const ko = rosterKeyFor(w.opponent);
+      if (!((kt === ka && ko === kb) || (kt === kb && ko === ka))) continue;
+
+      /* Scores are stored from this team's perspective regardless of
+         who is home, which is the one thing to get right here. */
+      const home = w.location === "at" ? w.opponent : team.team;
+      const homeScore = w.location === "at" ? w.opponentScore : w.teamScore;
+      const awayScore = w.location === "at" ? w.teamScore : w.opponentScore;
+      const won = decide(home, w.location === "at" ? team.team : w.opponent, homeScore, awayScore);
+      if (won) return won;
+    }
+  }
+
+  /* 2. postseason-data.js — the CPU-only games. */
+  const post = typeof POSTSEASON !== "undefined" ? POSTSEASON : null;
+  const round = post?.rounds?.find((r) => r.id === roundId);
+  if (!round) return null;
+
+  const g = (round.games || []).find((x) => {
+    const kh = rosterKeyFor(x.home);
+    const kw = rosterKeyFor(x.away);
+    return (kh === ka && kw === kb) || (kh === kb && kw === ka);
+  });
+  if (!g) return null;
+  return decide(g.home, g.away, g.homeScore, g.awayScore);
+}
+
+/* One box on the tree.
+
+   PAINTED IN THE TEAM'S COLOUR, like the game's own bracket. The
+   fill comes from team-colors.js (see fillFor) and the text tone is
+   computed from it rather than stored, so a light fill can't end up
+   with light text. The logo sits on a pale chip because an ESPN mark
+   is drawn to sit on white and half of them vanish against their own
+   school's primary.
+
+   `entry` is the box where a team ENTERS the bracket — its first
+   round in the field. Only there does the automatic-qualifier star
+   appear: the star is a fact about how a team got in, so repeating it
+   on every subsequent box is noise that grows exactly as the bracket
+   narrows and the boxes matter more.
+
+   `col` / `row` place it; `drop` is the row distance to each feeder
+   and is what makes the incoming elbow appear at the right size.
+   Everything is inline custom properties, so the CSS stays free of
+   per-box rules. */
+function cfpNodeHtml(t, opts) {
+  const { col, row, drop = 0, entry = false, blank = "", cls = "" } = opts;
+
+  const place = `grid-column:${col};grid-row:${row + 1}/span 2;`;
+  const flags = drop ? " has-in" : "";
+  const dropVar = drop ? `--drop:${drop};` : "";
+
+  if (!t) {
+    return `<div class="cfp-node is-tbd${flags} ${cls}" style="${place}${dropVar}"><span class="cfp-tbd">${esc(
+      blank
+    )}</span></div>`;
+  }
+
+  const name = t.team;
+  const src = teamLogoSrc(name);
+  const mono = monogramFor(rosterEntryFor(name)?.team || name);
+  /* Non-empty only when a coach owns this team RIGHT NOW — a departed
+     coach's old school is just another ranked CPU program. */
+  const coach = isLeagueTeam(name) ? coachFor(name) : "";
+  const fill = fillFor(name);
+  /* The fill is the school's colour; the left bar stays the coach's
+     roster accent. Two different colours on one box, on purpose: one
+     says which school, the other says one of ours. */
+  const accent = coach ? colorFor(name) : "";
+
+  const vars =
+    place +
+    dropVar +
+    (fill ? `--fill:${fill};--ink:${inkOn(fill)};` : "") +
+    (accent ? `--team:${accent};` : "");
+
+  return `
+    <div class="cfp-node${fill ? " has-fill" : ""}${coach ? " is-coach" : ""}${flags} ${cls}" style="${vars}">
+      ${t.seed ? `<span class="cfp-seed">${esc(t.seed)}</span>` : ""}
+      <span class="cfp-logo">
+        <span class="cfp-mono">${esc(mono)}</span>
+        ${src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : ""}
+      </span>
+      <span class="cfp-who">
+        <span class="cfp-team" title="${esc(name)}">${esc(name)}</span>
+        ${coach ? `<span class="cfp-coach">${esc(coach)}</span>` : ""}
+      </span>
+      ${t.record ? `<span class="cfp-record">${esc(t.record)}</span>` : ""}
+      ${
+        entry && t.auto
+          ? `<span class="cfp-auto" title="Conference champion — automatic qualifier">&#9733;</span>`
+          : ""
+      }
+    </div>`;
+}
+
+/* The name of a GAME, sat between the two boxes that play it.
+
+   Between rather than beside: a bowl name floating next to the box a
+   winner advances into reads as the name of the NEXT round, which is
+   the one thing it isn't. Placed at the same grid row as that
+   destination box but one column to its left, which — because every
+   box is centred between its feeders — is exactly the midpoint of
+   the two boxes playing the game. The same one-line rule places all
+   seven labels. */
+const cfpBowlHtml = (col, row, text) =>
+  text
+    ? `<div class="cfp-bowl" style="grid-column:${col};grid-row:${row + 1}/span 2">${esc(text)}</div>`
+    : "";
+
+function renderCfpBracket(week) {
+  const host = document.getElementById("cfp-bracket");
+  if (!host) return;
+
+  const data = week == null ? null : cfpBracketForWeek(week);
+  const seeds = data && Array.isArray(data.seeds) ? data.seeds : null;
+  if (!seeds || seeds.length !== 12) {
+    host.hidden = true;
+    host.innerHTML = "";
+    return;
+  }
+
+  const bySeed = new Map(seeds.map((s) => [Number(s.seed), s]));
+  /* A winner advances as its own seed entry — seed and record travel
+     with it — so a team reads the same in the title game as it did in
+     the first round. Falls back to a bare name if a postseason file
+     somehow advances a team that isn't in the field. */
+  const named = (n) => {
+    if (!n) return null;
+    const k = rosterKeyFor(n);
+    return seeds.find((s) => rosterKeyFor(s.team) === k) || { team: n };
+  };
+
+  const r1 = CFP_R1_PAIRS.map(([lo, hi]) => [bySeed.get(lo), bySeed.get(hi)]);
+  const byes = CFP_BYE_FOR_R1.map((s) => bySeed.get(s));
+  const r1Winners = r1.map(([a, b]) => named(cfpGameWinner("cfp-r1", a?.team, b?.team)));
+  const qfWinners = r1Winners.map((w, i) =>
+    named(cfpGameWinner("cfp-qf", w?.team, byes[i]?.team))
+  );
+  const sf = [[qfWinners[0], qfWinners[1]], [qfWinners[2], qfWinners[3]]];
+  const sfWinners = sf.map(([a, b]) => named(cfpGameWinner("cfp-sf", a?.team, b?.team)));
+  const champ = named(cfpGameWinner("cfp-nc", sfWinners[0]?.team, sfWinners[1]?.team));
+
+  /* Bowl names come from every bracket up to this week, merged, not
+     from this one alone — the quarterfinal bowls are named in week 10
+     and the semifinal bowls only later. */
+  const bowls = cfpBowlsFor(week);
+  const at = (list, i) => (Array.isArray(list) && list[i]) || "";
+
+  const nodes = [];
+  const labels = [];
+
+  // First round — eight boxes, nothing feeds them.
+  r1.forEach(([a, b], i) => {
+    nodes.push(cfpNodeHtml(a, { col: 1, row: 4 * i + 1, entry: true }));
+    nodes.push(cfpNodeHtml(b, { col: 1, row: 4 * i + 3, entry: true }));
+  });
+
+  // Quarterfinal — the first-round winner, centred on its game, and the bye seed.
+  r1Winners.forEach((w, i) => {
+    nodes.push(cfpNodeHtml(w, { col: 2, row: 4 * i + 2, drop: 1, blank: "First-round winner" }));
+    nodes.push(cfpNodeHtml(byes[i], { col: 2, row: 4 * i + 4, entry: true }));
+  });
+
+  // Semifinal — one box per quarterfinal, centred on that pair.
+  qfWinners.forEach((w, i) => {
+    nodes.push(cfpNodeHtml(w, { col: 3, row: 4 * i + 3, drop: 1, blank: "Quarterfinal winner" }));
+  });
+
+  // Final — one box per semifinal.
+  sfWinners.forEach((w, j) => {
+    nodes.push(
+      cfpNodeHtml(w, {
+        col: 4,
+        row: j === 0 ? 5 : 13,
+        drop: 2,
+        blank: "Semifinal winner",
+      })
+    );
+  });
+
+  /* Game names, each between the two boxes that play it. One rule,
+     seven labels: a game's label sits at its destination box's row,
+     one column left — which is the midpoint of its two feeders. */
+  CFP_R1_PAIRS.forEach((_, i) => labels.push(cfpBowlHtml(1, 4 * i + 2, at(bowls.r1, i))));
+  r1Winners.forEach((_, i) => labels.push(cfpBowlHtml(2, 4 * i + 3, at(bowls.qf, i))));
+  labels.push(cfpBowlHtml(3, 5, at(bowls.sf, 0)));
+  labels.push(cfpBowlHtml(3, 13, at(bowls.sf, 1)));
+  labels.push(cfpBowlHtml(4, 9, bowls.nc || ""));
+
+  /* The champion gets its own column, and only once there is one.
+     An empty fifth column for most of the season would read as a
+     round nobody has played rather than a trophy nobody has won. */
+  if (champ) {
+    nodes.push(cfpNodeHtml(champ, { col: 5, row: 9, drop: 4, cls: "is-champ" }));
+  }
+
+  const heads = ["First Round", "Quarterfinal", "Semifinal", "National Championship"]
+    .concat(champ ? ["Champion"] : [])
+    .map((h, i) => `<div class="cfp-col-head" style="grid-column:${i + 1}">${esc(h)}</div>`)
+    .join("");
+
+  /* `projected` is the honest label for weeks 10 through the
+     conference championships: this is the field IF the season ended
+     today. tools/cfp.js --final clears it once the CCGs have
+     settled the bracket. */
+  const isProjected = data.projected !== false;
+
+  host.hidden = false;
+  host.innerHTML = `
+    <div class="section-head cfp-head">
+      <h2 class="section-title">College Football Playoff</h2>
+      <span class="section-tag${isProjected ? " is-projected" : ""}">${
+        isProjected ? `PROJECTED &middot; WEEK ${esc(data.week)}` : "FINAL FIELD"
+      }</span>
+    </div>
+    <p class="cfp-note">
+      Seeds 1&ndash;4 receive a first-round bye.
+      <span class="cfp-auto">&#9733;</span> marks a conference champion&rsquo;s automatic bid.
+      ${isProjected ? "The field is a projection and moves every week." : ""}
+    </p>
+    <div class="cfp-bracket-scroll">
+      <div class="cfp-bracket-grid${champ ? " has-champ" : ""}">
+        ${heads}
+        ${nodes.join("")}
+        ${labels.join("")}
+      </div>
+    </div>
+    ${bowls.site ? `<div class="cfp-site">${esc(bowls.site)}</div>` : ""}`;
 }
 
 /* ------------------------------------------------------------
@@ -1270,17 +2016,22 @@ function coachCareerFor(name) {
   const meetings = h2h
     ? h2h.opponents.reduce((all, o) => all.concat(o.meetings), [])
     : [];
-  const played = meetings.filter((m) => m.played);
+  /* A sim is decided (m.played) but was never actually played coach
+     vs coach, so it stays out of every stat below — PF, PA, average
+     margin, streak — same as it's already kept out of h2h.wins /
+     h2h.losses in computeH2H. It still shows up in the log via
+     h2hRowHtml, tagged SIM; it's just not counted here. */
+  const counted = meetings.filter((m) => m.played && !m.sim);
 
-  const pf = played.reduce((s, m) => s + m.pf, 0);
-  const pa = played.reduce((s, m) => s + m.pa, 0);
-  const enoughForAverages = played.length >= MIN_GAMES_FOR_AVERAGES;
+  const pf = counted.reduce((s, m) => s + m.pf, 0);
+  const pa = counted.reduce((s, m) => s + m.pa, 0);
+  const enoughForAverages = counted.length >= MIN_GAMES_FOR_AVERAGES;
 
   /* Streak walks the timeline newest-first and stops at the first
      result that breaks it. Meetings inside an opponent are already
      sorted newest-first, but ACROSS opponents they are not, so this
      re-sorts the flat list rather than trusting the grouping. */
-  const chron = played
+  const chron = counted
     .slice()
     .sort((a, b) => b.year - a.year || b.sortKey - a.sortKey);
   let streak = null;
@@ -1301,10 +2052,10 @@ function coachCareerFor(name) {
     name: h2h ? h2h.name : String(name),
     wins: h2h ? h2h.wins : 0,
     losses: h2h ? h2h.losses : 0,
-    playedGames: played.length,
+    playedGames: counted.length,
     pf,
     pa,
-    avgMargin: enoughForAverages ? (pf - pa) / played.length : null,
+    avgMargin: enoughForAverages ? (pf - pa) / counted.length : null,
     streak, // a count, shown from the first game — see the note above
     seasons: seasons.size || (CAREER.length ? 1 : 0),
     opponents: h2h ? h2h.opponents : [],
@@ -1320,7 +2071,7 @@ function coachCareerFor(name) {
 function nextGameFor(coach) {
   const team = SCHEDULES.find((t) => rosterKeyFor(t.team) === rosterKeyFor(coach.team));
   if (!team) return null;
-  const from = SEASON.currentWeek === "PRESEASON" ? 0 : Number(SEASON.currentWeek) || 0;
+  const from = currentSeasonWeek();
   const upcoming = (team.weeks || [])
     .filter((w) => Number(w.week) >= from && w.opponent && w.teamScore == null)
     .sort((a, b) => Number(a.week) - Number(b.week))[0];
@@ -1332,9 +2083,22 @@ function nextGameFor(coach) {
     /* A departed coach's school is a CPU opponent by the time anyone
        is looking at an upcoming week, so it gets no coach name. */
     coach: isLeagueTeam(upcoming.opponent, Number(upcoming.week))
-      ? coachFor(upcoming.opponent)
+      ? coachFor(upcoming.opponent, Number(upcoming.week))
       : "",
   };
+}
+
+/* The years behind a chip. A dynasty runs 8-10 seasons, so "2
+   CONFERENCE" eventually stops being the interesting half — WHEN is
+   what a roster card is for. Rendered as a separate span so the count
+   stays legible at a glance and the years read as the footnote they
+   are.
+
+   Empty when no year is known, rather than printing a stray
+   separator — see the null note in computeAchievements. */
+function achYears(list) {
+  if (!list || !list.length) return "";
+  return `<span class="cm-ach-yrs">${esc(list.join(", "))}</span>`;
 }
 
 function achievementsHtml(a) {
@@ -1344,16 +2108,18 @@ function achievementsHtml(a) {
     chips.push(
       `<span class="cm-ach cm-ach-nat">${"&#9733;".repeat(Math.min(a.natTitles, 5))} ${
         a.natTitles
-      } NATIONAL</span>`
+      } NATIONAL${achYears(a.titleYears)}</span>`
     );
   if (a.confTitles)
     chips.push(
       `<span class="cm-ach cm-ach-conf">${"&#9733;".repeat(Math.min(a.confTitles, 5))} ${
         a.confTitles
-      } CONFERENCE</span>`
+      } CONFERENCE${achYears(a.confYears)}</span>`
     );
   if (a.cfpAppearances)
-    chips.push(`<span class="cm-ach cm-ach-cfp">${a.cfpAppearances} CFP APPS</span>`);
+    chips.push(
+      `<span class="cm-ach cm-ach-cfp">${a.cfpAppearances} CFP APPS${achYears(a.cfpYears)}</span>`
+    );
   return `<div class="cm-achievements">${chips.join("")}</div>`;
 }
 
@@ -1369,6 +2135,55 @@ function statTile(label, value, tone) {
         empty ? "&ndash;" : esc(value)
       }</span>
     </div>`;
+}
+
+/* PF / PA read as either season-long totals or per-game averages.
+   One mode drives both tiles — comparing a total against an average
+   is meaningless, so they are never split. The choice is remembered
+   for the session so a reader who thinks in averages doesn't have to
+   re-set it on every card they open. */
+let PF_PA_MODE = "total"; // "total" | "avg"
+
+/* Each tile is its own button so either one flips the pair, and both
+   carry aria-pressed for the same reason: to a screen reader they are
+   two controls reporting one state. */
+function pfPaTileHtml(which, c) {
+  const avg = PF_PA_MODE === "avg";
+  const raw = which === "pf" ? c.pf : c.pa;
+  /* Same floor as avg margin: one game is a result, not an average.
+     Totals have no such threshold — a single game's points ARE the
+     total. */
+  const enough = c.playedGames >= MIN_GAMES_FOR_AVERAGES;
+  let value = null;
+  if (c.playedGames && (!avg || enough)) {
+    value = avg ? (raw / c.playedGames).toFixed(1) : raw.toLocaleString();
+  }
+  const empty = value == null;
+  const label = `${avg ? "Avg" : "Total"} ${which.toUpperCase()}`;
+  return `
+    <button type="button" class="cm-stat cm-stat-toggle" data-stat-toggle="${which}"
+            aria-pressed="${avg}"
+            title="Show ${avg ? "totals" : "per-game averages"}">
+      <span class="cm-stat-label">${esc(label)}<span class="cm-stat-swap" aria-hidden="true">&#8646;</span></span>
+      <span class="cm-stat-value${empty ? " is-empty" : ""}">${
+        empty ? "&ndash;" : esc(value)
+      }</span>
+    </button>`;
+}
+
+/* Swaps the two tiles in place rather than re-rendering the card:
+   the modal scroll position and any open focus stay exactly where
+   the reader left them. */
+function refreshPfPaTiles() {
+  const body = document.getElementById("coach-modal-body");
+  if (!body || !MODAL_OPENER_KEY) return;
+  const coach = ROSTER.find((r) => personKey(r.name) === MODAL_OPENER_KEY);
+  if (!coach) return;
+  const c = coachCareerFor(coach.name);
+  ["pf", "pa"].forEach((which) => {
+    const el = body.querySelector(`[data-stat-toggle="${which}"]`);
+    if (el) el.outerHTML = pfPaTileHtml(which, c);
+  });
 }
 
 function h2hRowHtml(o) {
@@ -1529,8 +2344,8 @@ function coachModalHtml(coach, view) {
       ${statTile("Power rank", c.rank ? `#${c.rank.rank}` : null, "gold")}
       ${statTile("Avg margin", margin, c.avgMargin > 0 ? "win" : c.avgMargin < 0 ? "loss" : "")}
       ${statTile("Streak", c.streak ? c.streak.label : null, c.streak && c.streak.win ? "win" : "loss")}
-      ${statTile("Total PF", c.playedGames ? c.pf.toLocaleString() : null)}
-      ${statTile("Total PA", c.playedGames ? c.pa.toLocaleString() : null)}
+      ${pfPaTileHtml("pf", c)}
+      ${pfPaTileHtml("pa", c)}
       ${statTile("L5", c.rank ? c.rank.l5 : null)}
       ${statTile("Seasons", c.seasons || null)}
     </div>
@@ -1630,7 +2445,21 @@ function setupCoachModal() {
        itself, never on its contents — which is why the body sits in a
        wrapper div. Without the wrapper every click would close it. */
     if (e.target === dlg) closeCoachModal();
-    if (e.target.closest && e.target.closest(".cm-close")) closeCoachModal();
+    if (!e.target.closest) return;
+    if (e.target.closest(".cm-close")) closeCoachModal();
+
+    /* PF/PA total <-> average. The tiles are swapped out by the
+       refresh, so focus is put back on the equivalent control by
+       name — otherwise a keyboard reader is dropped to the top of
+       the dialog every time they flip it. */
+    const swap = e.target.closest("[data-stat-toggle]");
+    if (swap) {
+      const which = swap.dataset.statToggle;
+      PF_PA_MODE = PF_PA_MODE === "avg" ? "total" : "avg";
+      refreshPfPaTiles();
+      const back = dlg.querySelector(`[data-stat-toggle="${which}"]`);
+      if (back) back.focus();
+    }
   });
 
   dlg.addEventListener("close", () => {
@@ -1673,13 +2502,20 @@ function populateWeekSelect() {
   const sel = document.getElementById("week-select");
   if (!sel) return;
 
+  /* 0-19. The four bowl weeks are pickable because coached teams now
+     have schedule rows in them — a playoff or bowl game is on the
+     coach's own schedule, so the week has something to show. */
   sel.innerHTML = Array.from(
-    { length: 16 },
+    { length: FINAL_WEEK + 1 },
     (_, w) => `<option value="${w}">${esc(weekLabel(w))}</option>`
   ).join("");
 
   // Open on the week the league is actually playing, not a fixed week 1.
-  sel.value = String(isPreseason() ? 0 : SEASON.currentWeek);
+  /* Opens on the week the league is playing. Preseason opens on week
+     0 (nothing has happened) and the offseason on the last bowl week
+     (everything has) — which is exactly what seasonIndex() encodes,
+     so the picker doesn't restate the rule. */
+  sel.value = String(currentSeasonWeek());
   sel.addEventListener("change", renderWeeklyGames);
 }
 
@@ -1768,7 +2604,7 @@ function renderTeamSchedule() {
          opponent in weeks 0-4 and is CPU from week 5 on, so the rows
          above and below the departure read differently on purpose. */
       const isLeague = isLeagueTeam(w.opponent, Number(w.week));
-      const oppCoach = isLeague ? coachFor(w.opponent) : "";
+      const oppCoach = isLeague ? coachFor(w.opponent, Number(w.week)) : "";
       const played = w.teamScore != null && w.opponentScore != null;
 
       let resultCls = "";
@@ -1779,12 +2615,21 @@ function renderTeamSchedule() {
         else { resultCls = "tie"; resultLetter = "T"; }
       }
 
-      const isCurrent = !isPreseason() && w.week === SEASON.currentWeek;
+      /* No week is "current" between seasons — highlighting the last
+         bowl week all offseason would read as a game about to be
+         played rather than one long finished. */
+      const isCurrent = !isBetweenSeasons() && w.week === SEASON.currentWeek;
+
+      /* A neutral-site game has no home team, so "AT" would be a
+         claim about a stadium neither side owns. The score still
+         reads from this team's perspective either way — only the
+         two letters change. */
+      const loc = w.neutral ? "VS" : w.location === "vs" ? "VS" : "AT";
 
       return `
-        <div class="team-sched-row${isCurrent ? " is-current" : ""}">
-          <span class="tsr-week">${esc(weekNum(w.week))}</span>
-          <span class="tsr-loc">${w.location === "vs" ? "VS" : "AT"}</span>
+        <div class="team-sched-row${isCurrent ? " is-current" : ""}${w.round ? " is-postseason" : ""}">
+          <span class="tsr-week">${esc(w.title || weekNum(w.week))}</span>
+          <span class="tsr-loc">${loc}</span>
           <span class="tsr-opp">
             <span class="tsr-opp-name">${rankBadgeHtml(w.opponent, badgeWeekFor(played, w.week))}${esc(w.opponent)}</span>
             ${
@@ -1906,8 +2751,12 @@ function tickerSegments() {
     return segs;
   }
 
-  const week = SEASON.currentWeek;
-  segs.push(seg(weekLabel(week)));
+  /* seasonIndex(), not SEASON.currentWeek — in the offseason this has
+     to be a number for the loop below, and it has to be FINAL_WEEK so
+     the ticker carries the bowl results rather than stopping at the
+     regular season. */
+  const week = currentSeasonWeek();
+  segs.push(seg(isOffseason() ? SEASON.statusLine || "OFFSEASON" : weekLabel(week)));
 
   // Latest finals, league games first.
   const finals = [];
@@ -1999,6 +2848,8 @@ function renderFooter() {
     // Just the dynasty you're in and the current week.
     const phase = isPreseason()
       ? "PRESEASON"
+      : isOffseason()
+      ? "OFFSEASON"
       : weekLabel(SEASON.currentWeek).toUpperCase();
 
     const segs = [INFO.name.toUpperCase()];
@@ -2016,18 +2867,26 @@ function renderFooter() {
     const items = [
       { label: "Discord", url: safeUrl(links.discord) },
       { label: "Rules", url: safeUrl(links.rules) },
-      /* Vacation Tracker. Comes from LEAGUE_INFO like the other two,
-         not a literal — a hardcoded form URL here would have pointed
-         this league's coaches at another league's tracker. Blank
-         until there's one, and a blank link doesn't render. */
-      { label: "Vacation Tracker", url: safeUrl(links.vacation) },
+      /* Vacation Tracker. Same on every league, so it's a literal
+         here rather than per-league data — and now that it lives on
+         the site rather than in a Google Form, it's an internal link
+         resolved from the site root the same way the admin link
+         below is. One page serves all three dynasties on purpose: a
+         vacation is a fact about a person, not about a league. */
+      { label: "Vacation Tracker", url: `${siteRoot()}vacation/`, internal: true },
       /* Commissioner sign-in. Always shown, on every league — it's a
          login wall, not a back door, so a coach clicking it just
          finds a box they have no code for. Not run through safeUrl()
          because that only accepts absolute http(s) URLs and this is
          a relative path within the site, written here as a literal
-         rather than taken from data. */
-      { label: "Commissioner tools", url: "../admin/", internal: true },
+         rather than taken from data.
+
+         Root-relative, not "../admin/" — a literal "../" only reaches
+         /admin/ from a page one level deep (/3star/). From a page two
+         levels deep (/3star/pickem/) it resolves to /3star/admin/ and
+         404s. siteRoot() finds the actual site root at any depth, the
+         same way renderLeagueSwitch() locates the sibling leagues. */
+      { label: "Commissioner tools", url: `${siteRoot()}admin/`, internal: true },
     ].filter((l) => l.url);
 
     linksEl.innerHTML = items
@@ -2067,7 +2926,7 @@ const TABS = ["home", "schedule", "rankings", "top25", "roster"];
    isn't there.
    ------------------------------------------------------------ */
 function pruneEmptyTabs() {
-  if (TOP25_DATA.length) return;
+  if (POLL_BLOCKS.size) return;
 
   document.querySelector('.tab-btn[data-tab="top25"]')?.remove();
   document.getElementById("top25")?.remove();
@@ -2139,6 +2998,29 @@ function setupTabs() {
    only things it doesn't do are close on outside click and close on
    Escape, both added below.
    ------------------------------------------------------------ */
+/* WHERE THE SITE ROOT IS.
+
+   Used for any link that has to reach a top-level folder (another
+   league, /admin/) from a page whose own depth varies — /3star/ is
+   one level down, /3star/pickem/ is two. A hard-coded "../" is only
+   ever right for the shallowest case: from /3star/pickem/ it
+   resolves to /3star/admin/ and 404s.
+
+   So find the current league's own segment in the path and rebuild
+   from in front of it — correct at any depth, and under any base
+   path, which also keeps local preview working when the site isn't
+   served from the root.
+
+   Falls back to "../" when the league dir isn't in the path at all,
+   which is the right guess for a page that isn't inside a league
+   folder. */
+function siteRoot() {
+  const current = document.body.dataset.league || "";
+  const path = location.pathname;
+  const at = current ? path.lastIndexOf(`/${current}/`) : -1;
+  return at === -1 ? "../" : path.slice(0, at + 1);
+}
+
 function renderLeagueSwitch() {
   const wrap = document.getElementById("league-switch");
   const menu = document.getElementById("league-menu");
@@ -2151,13 +3033,14 @@ function renderLeagueSwitch() {
   }
 
   const current = document.body.dataset.league || "";
+  const base = siteRoot();
 
   menu.innerHTML = leagues
     .map((l) => {
       const here = l.dir === current;
       return `
         <a class="league-menu-item${here ? " is-current" : ""}"
-           href="../${esc(l.dir)}/"
+           href="${esc(base)}${esc(l.dir)}/"
            style="--team:${esc(l.accent)}"
            ${here ? 'aria-current="page"' : ""}>
           <span class="lm-dot"></span>
@@ -2180,6 +3063,49 @@ function renderLeagueSwitch() {
 }
 
 /* ------------------------------------------------------------
+   MOBILE TAB MENU
+   ------------------------------------------------------------
+   A plain button + .open class, not a <details> — see the note in
+   style.css on why: recent Chrome hides details content through an
+   internal ::details-content pseudo-element that a CSS override
+   can't force open, which made the tab strip disappear on DESKTOP
+   too, not just fail to collapse on mobile. A button has no such
+   internal state, so open/close is entirely ours to drive: click to
+   toggle, click a tab or click outside or press Escape to close.
+   Runs on every page — league pages and shell pages like
+   /3star/pickem/ alike — so it has to be independent of
+   setupTabs(), which shell pages skip. */
+function setupTabsMenu() {
+  const menu = document.getElementById("tabs-menu");
+  const toggle = document.getElementById("tabs-toggle");
+  if (!menu || !toggle) return;
+
+  const setOpen = (open) => {
+    menu.classList.toggle("open", open);
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  };
+
+  toggle.addEventListener("click", () => {
+    setOpen(!menu.classList.contains("open"));
+  });
+
+  menu.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setOpen(false));
+  });
+
+  document.addEventListener("click", (e) => {
+    if (menu.classList.contains("open") && !menu.contains(e.target)) setOpen(false);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && menu.classList.contains("open")) {
+      setOpen(false);
+      toggle.focus();
+    }
+  });
+}
+
+/* ------------------------------------------------------------
    INIT
    ------------------------------------------------------------ */
 function init() {
@@ -2194,9 +3120,47 @@ function init() {
   if (badgeEl) badgeEl.textContent = (INFO.tag || "").toUpperCase();
 
   renderLeagueSwitch();
+  setupTabsMenu();
 
   const heroSubEl = document.getElementById("hero-sub");
   if (heroSubEl) heroSubEl.textContent = (INFO.tag || "").toUpperCase();
+
+  /* SHELL-ONLY PAGES.
+     ------------------------------------------------------------
+     /3star/pickem/ wears the same chrome as a league page — ticker,
+     header, league switcher, footer — but has no tab panels, because
+     it isn't a tab. It renders its own content from the pick'em
+     Worker.
+
+     Detected by the absence of .tab-panel rather than by a flag on
+     the page, so a new shell page gets this for free and can't
+     forget to declare itself. Everything above this line is chrome
+     and has already run; everything below assumes panels exist.
+
+     Two things are deliberately skipped rather than merely allowed
+     to no-op:
+
+       document.title  — the renderers below tolerate missing
+         elements, but this one would overwrite a title the page set
+         for itself, and a pick'em page called "3-Star Dynasty" is
+         wrong in the tab bar, in bookmarks and in link previews.
+
+       setupTabs()  — it reads the hash on load and calls showTab(),
+         which clears .active from every .tab-btn it finds. On a page
+         whose current tab is a link rather than a button, that would
+         quietly un-highlight the tab you're standing on. */
+  if (!document.querySelector(".tab-panel")) {
+    renderTicker();
+    renderFooter();
+    /* The Top 25 tab retitles itself to "CFP Top 25" from week 10 —
+       that rename is the whole user-facing difference between the AP
+       era and the committee's, and it normally happens inside
+       renderTop25(), which a shell page never reaches. Without this
+       the tab strip would disagree with itself depending on which
+       page you were standing on. */
+    renderPollTabLabel();
+    return;
+  }
 
   document.title = INFO.tag ? `${INFO.name} — ${INFO.tag}` : INFO.name;
 

@@ -52,7 +52,7 @@
     const normalize = (s) => String(s ?? "").trim().toLowerCase();
 
     /* ----------------------------------------------------------
-       DEPARTURES — two flavours, one comparison.
+       DEPARTURES AND ARRIVALS — three flavours, one interval.
 
        `active: false` is a coach on the books but not playing (left
        for another dynasty, may return) with no played games worth
@@ -86,20 +86,54 @@
       return Infinity;
     };
 
-    /* Team key -> last week that team is a league team. A coach whose
-       `team` carries slash alternates contributes every one of them.
-       On a collision the later cutoff wins, so a team handed from a
-       departing coach to an active one stays live. */
-    const teamCutoff = new Map();
+    /* `joinedAtWeek: N` is the mirror image — a coach who took over a
+       team PART WAY THROUGH a season that was already being played.
+       Weeks before N are not theirs: the team was a CPU opponent then,
+       and the games their new school played in weeks 0..N-1 were CPU
+       games for whoever played them. They must stay that way. A team
+       inherited in week 11 does not retroactively turn the week 7
+       result into a head-to-head win.
+
+       So a team is a league team on a CLOSED INTERVAL [from, until]
+       rather than everything up to a cutoff. An ordinary coach is
+       [-Infinity, Infinity] and needs no flag, exactly as before.
+
+       This is deliberately about the TEAM and the WEEK, not about the
+       coach's standing in the league. Whether the new coach shows on
+       the roster grid today is a separate question with a separate
+       answer — see the note on rosterKeys in computeRankings. Someone
+       announced now but playing from week 11 is a normal thing to
+       want, and these two switches let you have it. */
+    const arrivalWeek = (c) =>
+      c.joinedAtWeek != null ? Number(c.joinedAtWeek) : -Infinity;
+
+    /* Team key -> the windows in which that team is a league team,
+       one per coach who has held it. A coach whose `team` carries
+       slash alternates contributes every one of them.
+
+       A LIST, NOT A MERGED RANGE. A team can change hands inside one
+       season — Woogity left Alabama after week 4, Trick whitey took
+       it over in week 11 — and the weeks in between belong to nobody.
+       Collapsing the two coaches into one widened interval would hand
+       week 6 to whichever of them the merge kept, turning Miles's CPU
+       win over an unmanned Alabama into a head-to-head result against
+       a coach who had already quit. So each holder keeps their own
+       [from, until] and a week counts if it falls inside ANY of them.
+
+       Windows that abut or overlap still leave no dead week, which
+       was the point of the older merging rule; this is that rule
+       minus the invented middle. */
+    const teamWindows = new Map();
     ALL_COACHES.forEach((c) => {
       const until = departureWeek(c);
+      const from = arrivalWeek(c);
       String(c.team)
         .split("/")
         .forEach((part) => {
           const k = normalize(part);
           if (!k) return;
-          const prev = teamCutoff.has(k) ? teamCutoff.get(k) : -Infinity;
-          teamCutoff.set(k, Math.max(prev, until));
+          if (!teamWindows.has(k)) teamWindows.set(k, []);
+          teamWindows.get(k).push({ from, until, coach: c });
         });
     });
 
@@ -125,23 +159,37 @@
        A team no coach has ever claimed isn't in the map at all, so it
        is neither a league team nor an inactive one — a plain CPU
        opponent, as before. */
-    const isLeagueTeam = (n, week) => {
-      const until = teamCutoff.get(rosterKeyFor(n));
-      return until !== undefined && (week === undefined ? Infinity : week) <= until;
-    };
-    const isInactiveTeam = (n, week) => {
-      const until = teamCutoff.get(rosterKeyFor(n));
-      return until !== undefined && (week === undefined ? Infinity : week) > until;
+    const holderAt = (n, week) => {
+      const wins = teamWindows.get(rosterKeyFor(n));
+      if (!wins) return undefined;
+      const w = week === undefined ? Infinity : week;
+      return wins.find((x) => w >= x.from && w <= x.until);
     };
 
-    const entryFor = (n) => {
+    const isLeagueTeam = (n, week) => !!holderAt(n, week);
+    const isInactiveTeam = (n, week) =>
+      teamWindows.has(rosterKeyFor(n)) && !holderAt(n, week);
+
+    /* `week` matters here for exactly one reason: a team that changed
+       hands mid-season has two roster entries, and the week decides
+       which coach's name goes on the game. Omitting it asks who holds
+       the team today, which is what a roster card or a By Team header
+       wants. The fallback keeps a played row from losing its coach
+       chip when the week falls in a gap between holders — that game's
+       opponent was CPU, but the name and colour still have to render.
+       `active: false` coaches stay unresolvable, as they always were. */
+    const entryFor = (n, week) => {
       const key = rosterKeyFor(n);
-      return RESOLVABLE.find((c) =>
+      const matches = RESOLVABLE.filter((c) =>
         String(c.team).split("/").some((part) => normalize(part) === key)
       );
+      if (matches.length < 2) return matches[0];
+      const held = holderAt(n, week);
+      if (held && matches.includes(held.coach)) return held.coach;
+      return matches[0];
     };
 
-    const coachFor = (n) => (entryFor(n) || {}).name || "";
+    const coachFor = (n, week) => (entryFor(n, week) || {}).name || "";
 
     /* Schedule-file team name for a name typed by a human.
        TEAM_SCHEDULES is keyed by the in-game name, but a
@@ -202,7 +250,7 @@
       if (entry.note || !entry.opponent) {
         notes.push({
           team: t.team,
-          coach: R.coachFor(t.team),
+          coach: R.coachFor(t.team, week),
           note: entry.note || "No game listed",
         });
         return;
@@ -219,9 +267,31 @@
           league.set(pairKey, {
             home,
             away,
-            homeCoach: R.coachFor(home),
-            awayCoach: R.coachFor(away),
+            homeCoach: R.coachFor(home, week),
+            awayCoach: R.coachFor(away, week),
             stadium: entry.stadium || "",
+            /* POSTSEASON FIELDS, all optional and all absent on a
+               regular-season row.
+
+               `neutral` — a championship or bowl has no true home
+               team. home/away still decide which score is which; only
+               the rendering changes.
+
+               `title` — the game's own name ("Rose Bowl", "SEC
+               Championship"). What a human reads.
+
+               `round` — the machine-readable round id. What the code
+               matches on. Deliberately NOT parsed out of `title`:
+               that would be inference over free text, and a bowl
+               renamed by a sponsor would silently stop counting
+               toward the coach's achievements.
+
+               Either side of a league game may carry them, so they're
+               OR'd in below when the second side is seen — the same
+               rule `sim` already follows. */
+            neutral: entry.neutral === true,
+            title: entry.title || "",
+            round: entry.round || null,
             /* Scores are stored per-team, so the writer needs to
                know which schedule entry each half lives in. */
             teams: [t.team, entry.opponent],
@@ -238,16 +308,27 @@
                matchup, so it's OR'd in when the second side is seen. */
             sim: entry.sim === true,
           });
-        } else if (entry.sim === true) {
-          league.get(pairKey).sim = true;
+        } else {
+          /* Second side of a game already seen. Only ever ADDS: a
+             field set on one coach's row and omitted on the other is
+             still true of the game, and the alternative — last side
+             wins — would make the result depend on roster order. */
+          const m = league.get(pairKey);
+          if (entry.sim === true) m.sim = true;
+          if (entry.neutral === true) m.neutral = true;
+          if (!m.title && entry.title) m.title = entry.title;
+          if (!m.round && entry.round) m.round = entry.round;
         }
       } else {
         cpu.push({
           team: t.team,
-          coach: R.coachFor(t.team),
+          coach: R.coachFor(t.team, week),
           opponent: entry.opponent,
           location: entry.location,
           stadium: entry.stadium || "",
+          neutral: entry.neutral === true,
+          title: entry.title || "",
+          round: entry.round || null,
           teams: [t.team],
           scored:
             entry.teamScore != null && entry.opponentScore != null
@@ -263,6 +344,110 @@
     return { league: [...league.values()], cpu, notes, missing };
   }
 
+  /* ============================================================
+     THE SEASON CALENDAR
+     ------------------------------------------------------------
+     Weeks 0-15 are the regular season, ending with the conference
+     championships. The game then plays FOUR more weeks, one per
+     playoff round, which it calls Bowl Week 1 through 4. So the
+     season's week axis runs 0-19, and weeks 16-19 map one-to-one
+     onto the CFP rounds already documented at buildPostseason().
+
+     THE SCHEDULES STOP AT 15. Bowl weeks have no entries in
+     schedule-data.js and aren't expected to — a playoff game is a
+     one-off neutral-site game and lives in postseason-data.js, in
+     the per-game shape that exists precisely because the per-team
+     week shape is wrong for it. So anything walking the schedule
+     loops to REGULAR_FINAL_WEEK, and anything asking "what has
+     happened by now" uses the round-to-week map below.
+
+     THAT MAP IS THE ONE NEW FACT. Postseason rounds have no `week`
+     field, deliberately — a round is a round, and giving it a number
+     would invite someone to look up "week 17's poll". But rounds DO
+     happen in a known week, and that is what makes "the season as it
+     stood in week 17" answerable: everything up to and including the
+     quarterfinals, and nothing after.
+     ============================================================ */
+  const REGULAR_FINAL_WEEK = 15; // conference championships
+  const BOWL_WEEKS = 4;
+  const FINAL_WEEK = REGULAR_FINAL_WEEK + BOWL_WEEKS; // 19
+
+  const BOWL_ROUNDS = ["cfp-r1", "cfp-qf", "cfp-sf", "cfp-nc"];
+  const BOWL_ROUND_LABEL = {
+    "cfp-r1": "CFP First Round",
+    "cfp-qf": "CFP Quarterfinals",
+    "cfp-sf": "CFP Semifinals",
+    "cfp-nc": "National Championship",
+  };
+
+  // week -> the CFP round played that week, for weeks 16-19.
+  const BOWL_ROUND_FOR_WEEK = {};
+  BOWL_ROUNDS.forEach((id, i) => (BOWL_ROUND_FOR_WEEK[REGULAR_FINAL_WEEK + 1 + i] = id));
+
+  /* The non-playoff bowls. TWO ROUNDS, NOT ONE — the game schedules
+     them across the first two bowl weeks, and a single `bowl` round
+     would have to claim one week for both. `roundWeek()` used to
+     answer week 16 for every bowl, which is harmless on screen and
+     wrong for `throughWeek`: a bowl played in week 17 would count as
+     already played when the season is capped at 16.
+
+     Split before any of this was written to, so no existing data has
+     to be rewritten. */
+  const EXTRA_BOWL_ROUNDS = ["bowl-w1", "bowl-w2"];
+  const EXTRA_BOWL_LABEL = {
+    "bowl-w1": "Bowl Games",
+    "bowl-w2": "Bowl Games",
+  };
+
+  /* The inverse, plus the conference championships — which are a
+     postseason ROUND but a regular-season WEEK, the one place the two
+     axes overlap. Anything not listed is treated as the first bowl
+     week: bowl season starts then, and the alternative — defaulting to
+     week 15 — would count a bowl as having been played during
+     championship week. */
+  const ROUND_WEEK = { ccg: REGULAR_FINAL_WEEK };
+  BOWL_ROUNDS.forEach((id, i) => (ROUND_WEEK[id] = REGULAR_FINAL_WEEK + 1 + i));
+  EXTRA_BOWL_ROUNDS.forEach((id, i) => (ROUND_WEEK[id] = REGULAR_FINAL_WEEK + 1 + i));
+  const DEFAULT_ROUND_WEEK = REGULAR_FINAL_WEEK + 1;
+
+  const roundWeek = (roundId) =>
+    Object.prototype.hasOwnProperty.call(ROUND_WEEK, roundId)
+      ? ROUND_WEEK[roundId]
+      : DEFAULT_ROUND_WEEK;
+
+  /* ------------------------------------------------------------
+     ROUND ORDER — postseason rounds render in ARRAY order
+     ------------------------------------------------------------
+     postseason-data.js has no `order` field on a round, by design:
+     "inserting a round means putting it in the right place". That is
+     fine for a hand-written file and useless to a writer, which needs
+     to know where a new round GOES.
+
+     Chronological, so the file reads down the calendar the way the
+     season was played. Two bowl rounds bracket the CFP quarterfinals
+     because that is genuinely when they happen.
+
+     A round not listed here sorts last, which is the safe direction:
+     an unknown round appears at the bottom of the postseason rather
+     than silently displacing the national championship.
+     ------------------------------------------------------------ */
+  const ROUND_ORDER = ["ccg", "bowl-w1", "cfp-r1", "bowl-w2", "cfp-qf", "cfp-sf", "cfp-nc"];
+
+  const roundRank = (roundId) => {
+    const i = ROUND_ORDER.indexOf(roundId);
+    return i === -1 ? ROUND_ORDER.length : i;
+  };
+
+  /* Every round id the tooling knows about, for validating a `round`
+     on a schedule row or a round id in postseason-data.js. */
+  const ALL_ROUNDS = ["ccg", ...BOWL_ROUNDS, ...EXTRA_BOWL_ROUNDS];
+  const isKnownRound = (roundId) => ALL_ROUNDS.indexOf(String(roundId)) !== -1;
+
+  /* What a round is CALLED, wherever one needs naming. Falls back to
+     the id so an unknown round renders as itself rather than blank. */
+  const ROUND_LABEL = Object.assign({ ccg: "Conference Championship" }, BOWL_ROUND_LABEL, EXTRA_BOWL_LABEL);
+  const roundLabel = (roundId) => ROUND_LABEL[roundId] || String(roundId || "");
+
   /* ------------------------------------------------------------
      WEEK LABEL — matches the site's own naming
      ------------------------------------------------------------
@@ -271,10 +456,19 @@
      with a middot; that's a display choice local to the page and is
      deliberately not unified here, because changing this string
      would change every future Discord post.
+
+     Bowl weeks are named the way the GAME names them — "Bowl Week 2"
+     — with the round in parentheses, because the commissioner reads
+     the week off the in-game screen and the round is what everyone
+     else cares about. Neither name alone is enough.
      ------------------------------------------------------------ */
   function weekLabel(week) {
     if (week === 14) return "Week 14 (Army-Navy)";
-    if (week === 15) return "Week 15 (Championships)";
+    if (week === REGULAR_FINAL_WEEK) return "Week 15 (Championships)";
+    const round = BOWL_ROUND_FOR_WEEK[week];
+    if (round) {
+      return `Bowl Week ${week - REGULAR_FINAL_WEEK} (${BOWL_ROUND_LABEL[round]})`;
+    }
     return `Week ${week}`;
   }
 
@@ -434,18 +628,23 @@
   }
 
   /* The latest week that has any scored coach-vs-coach result —
-     simmed ones included, because they still move the win-loss
-     record and so belong inside the poll's range. This is the week
-     the live poll represents; the previous week's poll (for the
-     up/down arrows) is this minus one. Returns null when no
+     simmed ones included, because a sim still closes out the week on
+     the schedule; it just doesn't count toward anyone's record. This
+     is the week the live poll represents; the previous week's poll
+     (for the up/down arrows) is this minus one. Returns null when no
      coach-vs-coach game has been recorded yet.
 
      Note this can be non-null while the poll itself is still empty:
-     if every H2H game so far was a sim, there's a record to show but
-     nothing scoreable yet, and computeRankings returns no rows. */
+     if every H2H game so far was a sim, there's a week to point at
+     but nothing scoreable yet, and computeRankings returns no rows. */
   function latestH2HWeek(data) {
     let latest = null;
-    for (let week = 0; week <= 15; week++) {
+    /* To FINAL_WEEK, not the conference championships. Schedules now
+       carry the postseason games a coached team played — see the
+       calendar note — so a bowl or a playoff round is the latest
+       result once it's been entered, and stopping at 15 would leave
+       the live poll pointing at championship week all December. */
+    for (let week = 0; week <= FINAL_WEEK; week++) {
       const wk = buildWeek(data, week);
       if (wk.league.some((m) => m.scored)) latest = week;
     }
@@ -479,8 +678,9 @@
        window     the last cfg.gamesWindow PLAYED, NON-SIM
                   coach-vs-coach games, ordered across seasons.
                   0 / null means "whole career".
-       record     career H2H, sims included. It is the coach's total
-                  against other humans, ever.
+       record     career H2H, sims excluded. It is the coach's total
+                  against other humans, ever, in games that were
+                  actually played rather than simmed through.
        season     the same for the most recent season only, so the UI
                   can show "this year" beside the career number.
        CPU games  never counted, in any of the above.
@@ -526,7 +726,19 @@
      playoff teams. */
   function makePollLookup(data, R, cfg) {
     const byWeek = new Map();
-    (data.TOP25 || []).forEach((p) => {
+
+    /* The weekly poll is the AP's through week 9 and the committee's
+       from week 10 (see cfp-data.js). They are the same shape and
+       never cover the same week, so they fold into one week-keyed
+       lookup — which is what makes weeks 10-15 rank normally instead
+       of reading as a stretch of unranked opponents. CFP entries are
+       folded in second so they win any week both claim. */
+    const weekly = [
+      ...(data.TOP25 || []),
+      ...(Array.isArray(data.CFP_POLL) ? data.CFP_POLL : []),
+    ];
+    weekly.forEach((p) => {
+      if (!p || p.week == null) return;
       const m = new Map();
       (p.teams || []).forEach((t) => {
         const k = R.rosterKeyFor(t.team);
@@ -535,7 +747,11 @@
       byWeek.set(Number(p.week), m);
     });
 
-    const lastApWeek = byWeek.size ? Math.max(...byWeek.keys()) : null;
+    /* "Last poll of the season", whichever kind it was — the
+       postseason fallback below wants the most recent measurement
+       that exists, not specifically an AP one. */
+    const sortedWeeks = [...byWeek.keys()].sort((a, b) => a - b);
+    const lastApWeek = sortedWeeks.length ? sortedWeeks[sortedWeeks.length - 1] : null;
 
     // CFP_POLL: accept a single poll object or a list of them.
     let cfp = null;
@@ -561,7 +777,22 @@
         }
         return cfg.unrankedRank;
       }
-      const m = byWeek.get(Number(meeting.week));
+      /* The poll for the week the game was played — or, when that week
+         has no poll of its own, the most recent one released before
+         it. Championship week carries no in-game poll (the committee's
+         last rankings are the week-15 seeding poll), and a league can
+         sit on a week whose poll hasn't been transcribed yet. Without
+         the fallback every opponent in such a week scores as an
+         unranked cupcake, which would make BEATING a top-10 team in
+         the conference championship worth less than beating them in
+         week 12. Same rule the schedule badges use, so the poll and
+         the badges still can't disagree. */
+      const week = Number(meeting.week);
+      let m = byWeek.get(week);
+      if (!m) {
+        const prior = sortedWeeks.filter((w) => w < week);
+        if (prior.length) m = byWeek.get(prior[prior.length - 1]);
+      }
       const r = m && m.get(oppTeamKey);
       return r ? r : cfg.unrankedRank;
     };
@@ -596,7 +827,7 @@
           teamYear: -Infinity,
           games: [], // played, non-sim — feeds the score
           recW: 0,
-          recL: 0, // career H2H, sims included
+          recL: 0, // career H2H — sims excluded, same as everywhere else
           seasonW: 0,
           seasonL: 0, // most recent season only
         });
@@ -615,7 +846,10 @@
 
       const meetings = seasonMeetings(data, {
         year,
-        throughWeek: last ? opts.throughWeek : 15,
+        /* A season that isn't the current one is finished, so it's
+           taken whole — to FINAL_WEEK, not to the CCG, or an archived
+           season's playoff would drop out of every career number. */
+        throughWeek: last ? opts.throughWeek : FINAL_WEEK,
       });
 
       meetings.forEach((m) => {
@@ -641,21 +875,25 @@
           const y = year == null ? 0 : year;
           if (y >= c.teamYear) {
             c.teamYear = y;
-            const entry = R.entryFor(s.myTeam);
+            const entry = R.entryFor(s.myTeam, m.week);
             c.team = (entry && entry.team) || s.myTeam;
           }
 
           const win = s.pf > s.pa;
+
+          /* A sim means the game was never actually played coach vs
+             coach, so it doesn't touch the record, the season record,
+             or the game log below — it stops right here. Kept out of
+             `games` too, which is why it can never enter the window
+             either. */
+          if (m.sim) return;
+
           if (win) c.recW++;
           else c.recL++;
           if (last) {
             if (win) c.seasonW++;
             else c.seasonL++;
           }
-
-          // Sims move the record but are not evidence of how a coach
-          // plays, so they stop here.
-          if (m.sim) return;
 
           /* The opponent is stored under its ROSTER name for the same
              reason c.team is: this game log is what the power-rankings
@@ -664,7 +902,7 @@
              close. entryFor() returns undefined for a CPU-era or
              unaliased name, so the schedule spelling stays the
              fallback rather than blanking the row. */
-          const oppEntry = R.entryFor(s.opp);
+          const oppEntry = R.entryFor(s.opp, m.week);
 
           c.games.push({
             year: year == null ? 0 : year,
@@ -788,7 +1026,7 @@
         coach: c.coach,
         powerScore,
         playedGames: n, // games inside the window (sims excluded)
-        h2hWins: c.recW, // career H2H, sims included
+        h2hWins: c.recW, // career H2H, sims excluded
         h2hLosses: c.recL,
         record: `${c.recW}-${c.recL}`, // career
         seasonRecord: `${c.seasonW}-${c.seasonL}`, // most recent season
@@ -1127,33 +1365,55 @@
   function seasonMeetings(data, opts) {
     opts = opts || {};
     const year = opts.year != null ? opts.year : (data.SEASON || {}).year ?? null;
-    const throughWeek = opts.throughWeek == null ? 15 : opts.throughWeek;
-    const includePostseason = throughWeek >= 15;
+    const throughWeek = opts.throughWeek == null ? FINAL_WEEK : opts.throughWeek;
     const out = [];
 
-    for (let week = 0; week <= throughWeek; week++) {
+    /* To FINAL_WEEK. A coach's postseason games live in their own
+       schedule rows now, so capping here at the conference
+       championships would drop every bowl and playoff game a league
+       team played out of the career record — while still counting the
+       CPU-only ones appended from postseason-data.js below. */
+    for (let week = 0; week <= Math.min(throughWeek, FINAL_WEEK); week++) {
       buildWeek(data, week).league.forEach((m) => {
+        /* A week row carrying a `round` IS a postseason game — a
+           conference championship, a bowl, a playoff round — it just
+           happens to be stored in the schedule because a coach played
+           in it. Phase and label follow the round, not the week, so a
+           career record reads "Rose Bowl" rather than "Week 17". */
+        const roundId = m.round && isKnownRound(m.round) ? m.round : null;
         out.push({
           year,
-          phase: "regular",
+          phase: roundId ? "postseason" : "regular",
           week,
-          roundId: null,
-          roundLabel: null,
-          label: weekLabel(week),
-          sortKey: week,
+          roundId,
+          roundLabel: roundId ? roundLabel(roundId) : null,
+          label: m.title || (roundId ? roundLabel(roundId) : weekLabel(week)),
+          /* Sorted with the postseason block below rather than by week,
+             so the two sources interleave into one chronology instead
+             of every schedule-stored bowl sorting before every
+             CPU-only one. */
+          sortKey: roundId ? 100 + roundRank(roundId) : week,
           home: m.home,
           away: m.away,
           homeCoach: m.homeCoach,
           awayCoach: m.awayCoach,
           stadium: m.stadium || "",
-          neutral: false,
+          neutral: m.neutral === true,
           scored: m.scored,
           sim: m.sim === true,
         });
       });
     }
 
-    (includePostseason ? buildPostseason(data) : []).forEach((m) => {
+    /* Each round in or out on its own, by the week it is played.
+       This used to be all-or-nothing at week 15, which had to call the
+       whole postseason unplayed during championship week — the week
+       the conference championships are actually played. Now "as it
+       stood in week 17" means through the quarterfinals, which is
+       what it should have meant all along. */
+    buildPostseason(data)
+      .filter((m) => throughWeek >= roundWeek(m.roundId))
+      .forEach((m) => {
       out.push({
         year,
         phase: "postseason",
@@ -1214,12 +1474,19 @@
      OUTPUT
        Map(coachKey -> {
          coachKey, name, teams: [{year, team}],
-         played, wins, losses,          // decided meetings, sims incl.
+         played, wins, losses,          // decided, non-sim meetings
          opponents: [{
            coachKey, name, wins, losses, played, upcoming,
            meetings: [ ... newest first ... ]
          }]
        })
+
+     SIMS. A simmed game is decided (it has a score) but was never
+     actually played coach vs coach, so it does not touch played,
+     wins, or losses at either level. It still appears in `meetings`
+     with `played: true, sim: true` — the card's log shows it, tagged,
+     it just isn't counted. Matches computeRankings, which excludes
+     sims from the record the same way.
 
      Each meeting carries: year, phase, week, roundLabel, label, team,
      oppTeam, home, neutral, played, sim, pf, pa, win, margin, stadium.
@@ -1282,7 +1549,10 @@
         return (e && e.team) || n;
       };
       const meetings = seasonMeetings(data, {
-        throughWeek: last ? opts.throughWeek : 15,
+        /* A season that isn't the current one is finished, so it's
+           taken whole — to FINAL_WEEK, not to the CCG, or an archived
+           season's playoff would drop out of every career number. */
+        throughWeek: last ? opts.throughWeek : FINAL_WEEK,
       });
 
       meetings.forEach((m) => {
@@ -1308,8 +1578,12 @@
           const pf = played ? (s.home ? m.scored.home : m.scored.away) : null;
           const pa = played ? (s.home ? m.scored.away : m.scored.home) : null;
           const win = played ? pf > pa : null;
+          // A sim has a score but was never actually played coach vs
+          // coach, so it's decided without being counted — see the
+          // SIMS note on computeH2H above.
+          const counts = played && !m.sim;
 
-          if (played) {
+          if (counts) {
             o.played++;
             c.played++;
             if (win) {
@@ -1319,7 +1593,7 @@
               o.losses++;
               c.losses++;
             }
-          } else {
+          } else if (!played) {
             o.upcoming++;
           }
 
@@ -1419,11 +1693,30 @@
      CFP appearance counts SEASONS, not games. Playing a quarterfinal
      and a semifinal in one year is one appearance.
 
-     Only coach-vs-coach postseason games exist in buildPostseason, so
-     a title won over a CPU team is invisible here. That is consistent
-     with everything else on the site, which only ever counts H2H —
-     and it is worth knowing before someone asks why their bowl win
-     didn't show up.
+     CPU OPPONENTS COUNT HERE, AND ONLY HERE.
+
+     Everywhere else on the site counts coach-vs-coach games only,
+     because everywhere else is answering a question about two people:
+     a head-to-head record, a power ranking, a career meeting list. A
+     trophy is a question about ONE person, and beating a CPU Boise
+     State for the conference title is winning the conference. So this
+     is the one traversal that reads `wk.cpu` as well as `wk.league`.
+
+     That is also why it can't be built on seasonMeetings(), which is
+     the career-record traversal and is H2H-only by construction. It
+     walks the weeks itself.
+
+     THREE SOURCES, DEDUPED:
+       1. league matchups on weeks carrying a `round`
+       2. CPU games on weeks carrying a `round`
+       3. postseason-data.js, for seasons written before the postseason
+          moved into the schedules — an archived 2026 may still hold
+          coached games there, and dropping them would rewrite history
+
+     A game seen twice — in a schedule row AND in postseason-data —
+     is counted once. Today that can't happen, since a game lives in
+     exactly one place; the guard is for archives written under the
+     old rule and for a hand-edit that half-migrates one.
      ------------------------------------------------------------ */
   function computeAchievements(input, opts) {
     opts = opts || {};
@@ -1450,40 +1743,94 @@
     seasons.forEach((data) => {
       if (!data) return;
       const year = (data.SEASON || {}).year ?? null;
+      const R = makeResolver(data);
 
-      buildPostseason(data).forEach((g) => {
-        const id = String(g.roundId || "").toLowerCase();
-        const isCfp = id.indexOf("cfp") === 0;
-        const isCcg = id.indexOf("ccg") === 0;
-        const isFinal = id === "cfp-nc";
+      /* One credit = one coach in one game. Keyed on round + the two
+         sides, so the same game arriving from two sources can't be
+         counted twice. */
+      const seen = new Set();
 
-        [
-          { coach: g.homeCoach, won: g.scored ? g.scored.home > g.scored.away : null },
-          { coach: g.awayCoach, won: g.scored ? g.scored.away > g.scored.home : null },
-        ].forEach((s) => {
-          if (!s.coach) return;
-          const a = ensure(s.coach);
+      const credit = (roundId, coachName, opponentName, won) => {
+        if (!coachName) return;
+        const id = String(roundId || "").toLowerCase();
+        if (!id) return;
 
-          // An appearance needs no result — reaching the bracket counts.
-          if (isCfp) a.cfpYears.add(year);
+        const key = [
+          id,
+          coachKey(coachName),
+          String(opponentName || "").trim().toLowerCase(),
+        ].join("::");
+        if (seen.has(key)) return;
+        seen.add(key);
 
-          if (s.won !== true) return;
-          if (isCcg) {
-            a.confTitles++;
-            a.confYears.push(year);
-          }
-          if (isFinal) {
-            a.natTitles++;
-            a.titleYears.push(year);
-          }
-          if (id.indexOf("bowl") === 0) a.bowlWins++;
+        const a = ensure(coachName);
+
+        // An appearance needs no result — reaching the bracket counts.
+        if (id.indexOf("cfp") === 0) a.cfpYears.add(year);
+
+        if (won !== true) return;
+        if (id.indexOf("ccg") === 0) {
+          a.confTitles++;
+          a.confYears.push(year);
+        }
+        if (id === "cfp-nc") {
+          a.natTitles++;
+          a.titleYears.push(year);
+        }
+        if (id.indexOf("bowl") === 0) a.bowlWins++;
+      };
+
+      /* 1 + 2 — the schedules. Only weeks that can hold a postseason
+         round are walked; a stray `round` on a week 3 row is ignored
+         rather than minting a September conference title. */
+      for (let week = REGULAR_FINAL_WEEK; week <= FINAL_WEEK; week++) {
+        const wk = buildWeek(data, week);
+
+        wk.league.forEach((m) => {
+          if (!m.round || !isKnownRound(m.round)) return;
+          credit(m.round, m.homeCoach, m.away, m.scored ? m.scored.home > m.scored.away : null);
+          credit(m.round, m.awayCoach, m.home, m.scored ? m.scored.away > m.scored.home : null);
         });
+
+        /* The CPU half. `wk.cpu` is one row per coach — there is no
+           second side to credit, which is the whole point. */
+        wk.cpu.forEach((g) => {
+          if (!g.round || !isKnownRound(g.round)) return;
+          credit(
+            g.round,
+            g.coach,
+            g.opponent,
+            g.scored ? g.scored.team > g.scored.opponent : null
+          );
+        });
+      }
+
+      /* 3 — postseason-data.js, for seasons archived before the
+         postseason moved into the schedules. */
+      buildPostseason(data).forEach((g) => {
+        credit(g.roundId, g.homeCoach, g.away, g.scored ? g.scored.home > g.scored.away : null);
+        credit(g.roundId, g.awayCoach, g.home, g.scored ? g.scored.away > g.scored.home : null);
       });
     });
 
+    /* Years are sorted and KEPT, not discarded. The card shows
+       "2 CONFERENCE · 2026, 2028" — a count alone says how many and
+       a dynasty's whole point is when. A null year (a season file
+       with no `year` set) is dropped rather than rendered as "null",
+       which is the one thing worse than showing nothing. */
+    const years = (list) =>
+      [...new Set(list.filter((y) => y != null))].sort((a, b) => a - b);
+
     out.forEach((a) => {
+      /* Counted BEFORE the null filter. A season with no `year` set is
+         a data fault, but the appearance still happened — dropping the
+         count too would hide a playoff run because of a missing field
+         somewhere else in the file. The count is the fact; the year
+         list is the annotation. */
       a.cfpAppearances = a.cfpYears.size;
-      delete a.cfpYears;
+      a.cfpYears = years([...a.cfpYears]);
+      a.confYears = years(a.confYears);
+      a.titleYears = years(a.titleYears);
       /* `any` is what the card checks. The trophy row is hidden
          entirely for a coach with nothing, rather than shown empty —
          an empty trophy case reads as a failure state. */
@@ -1502,6 +1849,18 @@
     computeH2H,
     auditScheduleSides,
     weekLabel,
+    REGULAR_FINAL_WEEK,
+    FINAL_WEEK,
+    BOWL_ROUNDS,
+    BOWL_ROUND_LABEL,
+    BOWL_ROUND_FOR_WEEK,
+    EXTRA_BOWL_ROUNDS,
+    ALL_ROUNDS,
+    ROUND_ORDER,
+    isKnownRound,
+    roundRank,
+    roundLabel,
+    roundWeek,
     parseScore,
     scoreableGames,
     editsFor,

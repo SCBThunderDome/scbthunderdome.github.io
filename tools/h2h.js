@@ -12,17 +12,17 @@
    the network, and never advances anything.
 
    USAGE
-     node tools/h2h.js --league main
+     node tools/h2h.js
          Every coach, with their record against each opponent.
 
-     node tools/h2h.js --league main --coach Projekt
+     node tools/h2h.js --coach Projekt
          One coach in detail, every meeting listed.
 
-     node tools/h2h.js --league main --summary
+     node tools/h2h.js --summary
          One line per coach. Good for spotting a name that failed
          to resolve.
 
-     node tools/h2h.js --league main --check
+     node tools/h2h.js --check
          Consistency checks against computeRankings, plus the
          structural checks listed at runChecks() below. Exits
          non-zero on failure, so it can gate a commit.

@@ -77,7 +77,7 @@ async function run({ publishes, h2h }) {
 
   const dom = new JSDOM(read("admin/index.html"), {
     runScripts: "outside-only",
-    url: "https://ncaalegends.github.io/admin/",
+    url: "https://scbthunderdome.github.io/admin/",
     virtualConsole,
   });
   const w = dom.window;

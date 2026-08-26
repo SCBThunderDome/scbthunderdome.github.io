@@ -83,13 +83,21 @@
         <div class="league-menu" id="league-menu"></div>
       </details>
     </div>
-    <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
-      <button class="tab-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="home">Home</button>
-      <button class="tab-btn" data-tab="schedule" role="tab" aria-selected="false" aria-controls="schedule">Schedule</button>
-      <button class="tab-btn" data-tab="rankings" role="tab" aria-selected="false" aria-controls="rankings">Rankings</button>
-      <button class="tab-btn" data-tab="top25" role="tab" aria-selected="false" aria-controls="top25">Top 25</button>
-      <button class="tab-btn" data-tab="roster" role="tab" aria-selected="false" aria-controls="roster">Roster</button>
-    </nav>
+    <!-- On mobile this whole block collapses into a hamburger. A plain
+         button + JS-toggled .open class, not <details> — see the note
+         in style.css on the MOBILE TAB MENU rules for why <details>
+         doesn't work here. Desktop needs nothing special: .tabs just
+         renders as a normal nav. -->
+    <div class="tabs-menu" id="tabs-menu">
+      <button type="button" class="tabs-toggle" id="tabs-toggle" aria-label="Menu" aria-haspopup="true" aria-expanded="false" aria-controls="tabs"><span class="tabs-toggle-bars"></span></button>
+      <nav class="tabs" id="tabs" role="tablist" aria-label="Sections">
+        <button class="tab-btn active" data-tab="home" role="tab" aria-selected="true" aria-controls="home">Home</button>
+        <button class="tab-btn" data-tab="schedule" role="tab" aria-selected="false" aria-controls="schedule">Schedule</button>
+        <button class="tab-btn" data-tab="rankings" role="tab" aria-selected="false" aria-controls="rankings">Rankings</button>
+        <button class="tab-btn" data-tab="top25" role="tab" aria-selected="false" aria-controls="top25">Top 25</button>
+        <button class="tab-btn" data-tab="roster" role="tab" aria-selected="false" aria-controls="roster">Roster</button>
+      </nav>
+    </div>
   </div>
 </header>
 
@@ -182,8 +190,19 @@
        Hidden entirely by script.js until this league has transcribed
        at least one week — see setupTabs(). -->
   <section id="top25" class="tab-panel" role="tabpanel" tabindex="-1">
+
+    <!-- CFP BRACKET
+         Empty and hidden until the season reaches the CFP era
+         (week 10) and a bracket has been transcribed into
+         cfp-data.js. renderCfpBracket() fills it and unhides it;
+         before then this is a zero-height comment's worth of page. -->
+    <div class="cfp-bracket-wrap" id="cfp-bracket" hidden></div>
+
     <div class="section-head">
-      <h2 class="section-title">Top 25</h2>
+      <!-- id, not just a class: the bracket above renders its own
+           .section-head, so "#top25 .section-title" would resolve to
+           whichever of the two happens to be first in the DOM. -->
+      <h2 class="section-title" id="top25-title">Top 25</h2>
       <span class="section-tag" id="top25-week-label"></span>
     </div>
     <ol class="top25-list" id="top25-list"></ol>
@@ -221,7 +240,10 @@
 <script src="league-data.js" defer></script>
 <script src="schedule-data.js" defer></script>
 <script src="top25-data.js" defer></script>
+<script src="cfp-data.js" defer></script>
+<script src="postseason-data.js" defer></script>
 <script src="../people.js" defer></script>
+<script src="../team-colors.js" defer></script>
 <script src="../week-core.js" defer></script>
 <script src="../script.js" defer></script>
 </body>

@@ -341,7 +341,7 @@ const TEAM_SCHEDULES = [
       { week: 6, opponent: "UCF", location: "vs", teamScore: 23, opponentScore: 7 },
       { week: 7, opponent: "Houston", location: "at", teamScore: 27, opponentScore: 0 },
       { week: 8, opponent: "Colorado", location: "vs", teamScore: 33, opponentScore: 27 },
-      { week: 9, opponent: "Iowa State", location: "at" },
+      { week: 9, opponent: "Iowa State", location: "at", teamScore: 28, opponentScore: 0 },
       { week: 10, opponent: "Kansas State", location: "at" },
       { week: 11, opponent: "Texas Tech", location: "vs" },
       { week: 12, opponent: "Arizona State", location: "at" },

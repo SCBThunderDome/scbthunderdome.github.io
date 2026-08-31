@@ -126,7 +126,59 @@
    ============================================================ */
 
 const CFP_POLL = [
+  {
+    week: 10,
+    teams: [
+      { rank: 1, team: "Notre Dame", record: "8-0" },
+      { rank: 2, team: "SMU", record: "8-0" },
+      { rank: 3, team: "Indiana", record: "8-1" },
+      { rank: 4, team: "Ohio State", record: "7-1" },
+      { rank: 5, team: "Oklahoma State", record: "8-0" },
+      { rank: 6, team: "South Carolina", record: "7-1" },
+      { rank: 7, team: "Tennessee", record: "7-1" },
+      { rank: 8, team: "Ole Miss", record: "7-1" },
+      { rank: 9, team: "Oklahoma", record: "6-2" },
+      { rank: 10, team: "Pittsburgh", record: "8-1" },
+      { rank: 11, team: "Kentucky", record: "7-1" },
+      { rank: 12, team: "UCLA", record: "7-1" },
+      { rank: 13, team: "Houston", record: "7-1" },
+      { rank: 14, team: "Duke", record: "7-1" },
+      { rank: 15, team: "Louisville", record: "6-2" },
+      { rank: 16, team: "Texas A&M", record: "6-2" },
+      { rank: 17, team: "Missouri", record: "6-2" },
+      { rank: 18, team: "Penn State", record: "6-2" },
+      { rank: 19, team: "Texas Tech", record: "6-2" },
+      { rank: 20, team: "BYU", record: "6-2" },
+      { rank: 21, team: "Nebraska", record: "5-2" },
+      { rank: 22, team: "Wisconsin", record: "6-2" },
+      { rank: 23, team: "UNLV", record: "7-1" },
+      { rank: 24, team: "Minnesota", record: "5-3" },
+      { rank: 25, team: "Miami", record: "5-3" },
+    ],
+  },
 ];
 
 const CFP_BRACKET = [
+  {
+    week: 10,
+    projected: true,
+    seeds: [
+      { seed:  1, team: "Notre Dame", record: "8-0", auto: true },
+      { seed:  2, team: "SMU", record: "8-0" },
+      { seed:  3, team: "Indiana", record: "8-1", auto: true },
+      { seed:  4, team: "Ohio State", record: "7-1" },
+      { seed:  5, team: "Oklahoma State", record: "8-0", auto: true },
+      { seed:  6, team: "South Carolina", record: "7-1" },
+      { seed:  7, team: "Tennessee", record: "7-1" },
+      { seed:  8, team: "Ole Miss", record: "7-1" },
+      { seed:  9, team: "Oklahoma", record: "6-2" },
+      { seed: 10, team: "Pittsburgh", record: "8-1", auto: true },
+      { seed: 11, team: "Kentucky", record: "7-1", auto: true },
+      { seed: 12, team: "UNLV", record: "7-1", auto: true },
+    ],
+    bowls: {
+      qf: ["Cotton Bowl", "Peach Bowl", "Rose Bowl", "Fiesta Bowl"],
+      site: "Las Vegas, NV",
+    },
+  },
 ];

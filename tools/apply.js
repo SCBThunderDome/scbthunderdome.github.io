@@ -56,6 +56,8 @@ const {
   weekLabel,
   FINAL_WEEK,
   top25GateError,
+  isSentinel,
+  seasonIndex,
   loadVacations,
   writeVacations,
   allRosterNames,
@@ -69,7 +71,68 @@ const {
 const Vac = require("../vacation-core");
 const { applyScores, scoreableGames } = require("./scores");
 const { resolveEntries, ScoreError } = require("../score-core");
-const { updateSeason, updateNextAdvance, buildMessage, post, webhookUrl } = require("./advance");
+const { updateSeason, updateNextAdvance, buildMessage, post, webhookUrl, makeMentioner } = require("./advance");
+
+/* The rollover itself — archive, verify, reset — lives in
+   tools/rollover.js and is called, never reimplemented. Its header
+   explains at length why the archive-then-reset ORDER is the whole
+   safety property; a second copy of that sequence here would be a
+   second chance to get it backwards. */
+const { runRollover } = require("./rollover");
+
+/* The next playoff round's schedule rows — see tools/bracket-sync.js.
+   Called, never reimplemented, for the same reason as the rollover:
+   the pairing arithmetic and the two-source winner lookup already
+   exist in one place and have to keep agreeing with the bracket the
+   site draws. */
+const { syncRound, syncSummary, BracketSyncError, ROUND_FOR_WEEK } = require("./bracket-sync");
+
+/* ------------------------------------------------------------
+   THE BOWL-WEEK ROWS
+   ------------------------------------------------------------
+   A playoff game between two coached teams only becomes enterable
+   once it exists as a row on both coaches' schedules, and until this
+   ran on the web path, nothing created those rows unless someone
+   remembered to run bracket-sync.js from a laptop. When they didn't,
+   the postseason stalled in the least obvious way available: the
+   admin page offered no games to score, so the round couldn't be
+   recorded, so the bracket couldn't advance, so the round after it
+   had no rows either.
+
+   So every web advance INTO a bowl week now derives that round, and
+   every score entered during one re-derives the current round — which
+   is what catches a result that lands after the advance rather than
+   before it. Re-running is silent by design (bracket-sync never
+   touches a row that exists), so calling it on every pass costs
+   nothing and removes the "did anyone remember?" question entirely.
+
+   NOTHING HERE MAY FAIL AN ADVANCE. By the time this is reached the
+   season file is written and the announcement is about to go out; a
+   bracket that can't be read yet — still projected, not entered,
+   half a round short — is a warning in the Actions log and a row
+   someone adds by hand, never a lost advance. That is why syncRound
+   throws where the CLI would exit.
+   ------------------------------------------------------------ */
+function syncBracketRows(L, week) {
+  const w = seasonIndex(week);
+  if (!ROUND_FOR_WEEK[w]) return null; // not a bowl week — nothing to derive
+
+  let result;
+  try {
+    result = syncRound({ L, week: w });
+  } catch (e) {
+    if (!(e instanceof BracketSyncError)) throw e;
+    console.error(`\n  WARNING: could not derive the ${weekLabel(w).toLowerCase()} matchups — ${e.message}`);
+    console.error(
+      "  The submission still stands. Add the rows by hand once the bracket is readable:\n" +
+        `    node tools/bracket-sync.js --league ${L.slug} --week ${w}`
+    );
+    return null;
+  }
+
+  result.lines.forEach((l) => console.log(l ? "  " + l : ""));
+  return result;
+}
 
 /* Read tools/config.json (which on the Actions runner IS the
    DISCORD_CONFIG secret, written there by the workflow) WITHOUT the
@@ -102,21 +165,34 @@ function loadDiscordConfig() {
 const SCORE_LEAGUES = ["scbthunderdome"];
 const ADVANCE_LEAGUES = ["scbthunderdome"];
 
+/* Which leagues may be ROLLED OVER from the web — the once-a-year
+   action that archives a finished season and starts the next one.
+   Its own list rather than a reuse of ADVANCE_LEAGUES: an ordinary
+   advance rewrites four fields, and this writes a permanent archive,
+   so "may advance" and "may end the season" are worth being separate
+   answers even while they hold the same three leagues. */
+const ROLLOVER_LEAGUES = ["scbthunderdome"];
+
 /* Everything the web path can reach at all — the union, used only
    for the "is this even a web league" check and error text. */
-const ALLOWED_LEAGUES = [...new Set([...SCORE_LEAGUES, ...ADVANCE_LEAGUES])];
+const ALLOWED_LEAGUES = [
+  ...new Set([...SCORE_LEAGUES, ...ADVANCE_LEAGUES, ...ROLLOVER_LEAGUES]),
+];
 
 /* "deadline" rides on ADVANCE_LEAGUES rather than getting a list of
    its own: it edits the same SEASON block an advance does, just one
    field of it, so anywhere the week can be advanced from the web the
    deadline can also be nudged from the web. */
 function leaguesForAction(action) {
-  return action === "advance" || action === "deadline" ? ADVANCE_LEAGUES : SCORE_LEAGUES;
+  if (action === "advance" || action === "deadline") return ADVANCE_LEAGUES;
+  if (action === "rollover") return ROLLOVER_LEAGUES;
+  return SCORE_LEAGUES;
 }
 
 function verbFor(action) {
   if (action === "advance") return "advanced";
   if (action === "deadline") return "rescheduled";
+  if (action === "rollover") return "rolled over";
   return "scored";
 }
 
@@ -253,11 +329,16 @@ function validate(payload) {
   }
 
   const action = payload.action;
-  if (action !== "scores" && action !== "advance" &&
-      action !== "deadline" && action !== "vacation") {
+  if (
+    action !== "scores" &&
+    action !== "advance" &&
+    action !== "deadline" &&
+    action !== "vacation" &&
+    action !== "rollover"
+  ) {
     bad(
-      `unknown action "${action}" — expected "scores", "advance", ` +
-        `"deadline" or "vacation"`
+      `unknown action "${action}" — expected "scores", "advance", "deadline", ` +
+        `"rollover" or "vacation"`
     );
   }
 
@@ -269,6 +350,49 @@ function validate(payload) {
   if (action === "vacation") return validateVacation(payload);
 
   const league = payload.league;
+  const permittedForLeague = leaguesForAction(action);
+
+  /* A ROLLOVER HAS A LEAGUE BUT NO WEEK. It doesn't move the season
+     along the axis, it ends the axis: 2026 is copied into
+     seasons/2026/ and the live folder starts again at "PRESEASON".
+     So it branches out above the week checks, the same way a vacation
+     branches out above the league checks. */
+  if (action === "rollover") {
+    if (!permittedForLeague.includes(league)) {
+      bad(`league "${league}" cannot be rolled over this way. Allowed: ${permittedForLeague.join(", ")}`);
+    }
+    if (payload.confirm !== true) {
+      bad("rollover requires an explicit confirmation");
+    }
+
+    /* THE YEAR IS SENT BACK, AND IT IS A LOCK, NOT A LABEL. The admin
+       page reads SEASON.year out of the published league-data.js and
+       returns it here; if the two disagree, the page was looking at a
+       different season than the one on disk — a stale tab, or a
+       rollover that already ran — and the submission is refused rather
+       than archiving a year nobody meant. This is the one field that
+       makes a double-click on a once-a-year button safe. */
+    const year = payload.year;
+    if (!Number.isInteger(year) || year < 2000 || year > 2200) {
+      bad(`rollover year must be a whole year like 2026, got ${JSON.stringify(payload.year)}`);
+    }
+
+    /* The web equivalent of --force. rollover.js prints its readiness
+       notes and refuses without it; the admin page shows the same
+       notes and makes the commissioner tick a box, so an unfinished
+       season can still be archived deliberately and never by accident. */
+    if (payload.force !== undefined && typeof payload.force !== "boolean") {
+      bad("rollover force must be true or false");
+    }
+
+    return {
+      action,
+      league,
+      year,
+      force: payload.force === true,
+      actor: requireSafeText(payload.actor || "unknown", "actor"),
+    };
+  }
   const permitted = leaguesForAction(action);
   if (!permitted.includes(league)) {
     bad(
@@ -283,9 +407,24 @@ function validate(payload) {
      accepts 0-19 and the page offers a bowl week, so the payload
      passed every check up to here and then died on the runner. The
      bound belongs to week-core, not to a number typed in twice. */
-  const week = Number(payload.week);
-  if (!Number.isInteger(week) || week < 0 || week > FINAL_WEEK) {
-    bad(`week must be a whole number 0-${FINAL_WEEK}, got ${JSON.stringify(payload.week)}`);
+  /* "OFFSEASON" is the exception, and only for an advance. It is the
+     held state after the national championship — a real advance with
+     a real announcement, but not a week, so there is nothing in it to
+     score. The sentinel list lives in lib/league.js; isSentinel() is
+     the same test parseWeek() applies to --week on the command line,
+     so the web and the CLI can't disagree about what the word means. */
+  let week;
+  if (action === "advance" && isSentinel(payload.week)) {
+    week = String(payload.week).trim().toUpperCase();
+  } else {
+    week = Number(payload.week);
+    if (!Number.isInteger(week) || week < 0 || week > FINAL_WEEK) {
+      bad(
+        `week must be a whole number 0-${FINAL_WEEK}` +
+          (action === "advance" ? ` or OFFSEASON` : ``) +
+          `, got ${JSON.stringify(payload.week)}`
+      );
+    }
   }
 
   /* Recorded for the commit message and the Actions log. This is the
@@ -344,6 +483,9 @@ function validate(payload) {
        that hasn't been reloaded since this changed, but only to be
        reinterpreted as a date — the same rule, not a bypass. */
     const rawAt = payload.nextAt !== undefined ? payload.nextAt : payload.next;
+    /* parseDeadlineField already treats an explicit "" as a deliberate
+       clear — which is what the offseason advance sends to hide the
+       badge — and undefined still means "carry the existing one over". */
     out.nextAt = rawAt === undefined ? undefined : parseDeadlineField(rawAt);
     out.status = payload.status === undefined ? undefined : requireSafeText(payload.status, "status");
   }
@@ -418,10 +560,20 @@ function doScores(p, L) {
   result.write();
   console.log(`\n  ${L.dir}/schedule-data.js updated — ${result.applied.length} entries.\n`);
 
+  /* A score can complete a playoff round AFTER the advance into the
+     next one has already happened — the last quarterfinal reported a
+     day late is the ordinary case, not a strange one. So re-derive
+     the round the league is currently in, which is a no-op every
+     other time and the thing that unsticks the postseason on the
+     occasion it isn't. The week just scored is deliberately not what
+     is derived: its rows are what these scores landed on. */
+  const synced = syncBracketRows(L, data.SEASON && data.SEASON.currentWeek);
+  const syncNote = syncSummary(synced);
+
   return {
     changed: true,
     commit: `${L.label}: ${weekLabel(p.week)} scores (via ${p.actor})`,
-    summary: answered.join("; "),
+    summary: answered.join("; ") + (syncNote ? ` · ${syncNote}` : ""),
   };
 }
 
@@ -467,7 +619,7 @@ function doDeadline(p, L) {
 }
 
 async function doAdvance(p, L) {
-  const data = loadData(L.paths);
+  let data = loadData(L.paths);
 
   /* Block advancing into a week whose Top 25 isn't transcribed yet.
      Main only, and a no-op for a league that hasn't started a poll —
@@ -475,14 +627,28 @@ async function doAdvance(p, L) {
      the local advance.js path. Passing L is what makes 3-star and
      1-star advance from the admin page without waiting on a
      screenshot. */
-  const gate = top25GateError(data, p.week, L);
-  if (gate) die(gate);
+  /* THE OFFSEASON IS NOT A WEEK, so neither the gate nor buildWeek
+     applies to it — the poll gate would demand a CFP Top 25 that
+     stopped being published in December, and buildWeek would report
+     every coach as missing an entry for a phase that has no entries
+     to miss. Same two exemptions advance.js makes on the CLI path;
+     see the sentinel branch there. */
+  const sentinel = isSentinel(p.week);
+
+  if (!sentinel) {
+    const gate = top25GateError(data, p.week, L);
+    if (gate) die(gate);
+  }
 
   /* weekLabel(), not `WEEK n` — a bowl week's status line reads
      "BOWL WEEK 1 (CFP FIRST ROUND)", which is what advance.js writes
      and what the badge on the site expects. The old fallback would
      have published "WEEK 16". */
-  const status = p.status || weekLabel(p.week).toUpperCase();
+  const label = sentinel ? "the Offseason" : weekLabel(p.week);
+  /* Bare "OFFSEASON" rather than "THE OFFSEASON" — same default the
+     CLI writes, and the field a per-step line like
+     "OFFSEASON · SIGNING DAY" is later hand-edited into. */
+  const status = p.status || (sentinel ? p.week : label.toUpperCase());
 
   /* Carry the existing deadline over when none was given, matching
      advance.js's behaviour rather than blanking the badge. `at` is
@@ -493,9 +659,20 @@ async function doAdvance(p, L) {
 
   const changed = updateSeason(L.paths.league, p.week, status, p.nextAt);
 
-  const wk = buildWeek(data, p.week);
+  /* The next playoff round's rows, BEFORE the week is built — the
+     announcement's whole job is to tell four coaches who they play,
+     and rows written after buildWeek would be rows nobody is told
+     about until the following advance. A no-op outside weeks 16-19
+     and on any bowl week whose rows are already there. */
+  const synced = sentinel ? null : syncBracketRows(L, p.week);
+  if (synced && synced.written.length) data = loadData(L.paths);
+  const syncNote = syncSummary(synced);
+
+  const wk = sentinel
+    ? { league: [], cpu: [], notes: [], missing: [] }
+    : buildWeek(data, p.week);
   console.log(
-    `\n  ${L.label} → ${weekLabel(p.week)} by ${p.actor} — ` +
+    `\n  ${L.label} → ${label} by ${p.actor} — ` +
       `${wk.league.length} H2H, ${wk.cpu.length} CPU, ${wk.notes.length} bye/off`
   );
   if (wk.missing.length) {
@@ -503,14 +680,28 @@ async function doAdvance(p, L) {
   }
 
   if (!changed) {
-    /* The file already said this — a re-run. Don't re-post: the commit
-       step is skipped on no-change, and a spurious second announcement
-       is worse than silence. */
+    /* The file already said this — a re-run. Don't re-post: a spurious
+       second announcement is worse than silence.
+
+       The rows are the exception. Re-submitting the advance is the
+       obvious thing to do when a bowl week's matchups never appeared,
+       and it used to be the one thing that couldn't help: no change to
+       league-data.js meant changed=false meant the workflow skipped
+       the commit and threw the rows away. So a sync that wrote
+       something is a change worth committing on its own, quietly. */
+    if (synced && synced.written.length) {
+      console.log(`\n  ${L.dir}/league-data.js already said that — committing the bracket rows only.\n`);
+      return {
+        changed: true,
+        commit: `${L.label}: ${label} matchups (via ${p.actor})`,
+        summary: syncNote,
+      };
+    }
     console.log(`\n  ${L.dir}/league-data.js already said that. Nothing to write, nothing posted.\n`);
     return { changed: false };
   }
 
-  console.log(`\n  ${L.dir}/league-data.js updated — week ${p.week}, next "${next}".\n`);
+  console.log(`\n  ${L.dir}/league-data.js updated — ${label}, next "${next}".\n`);
 
   /* Announce it in Discord — the same message a local advance.cmd run
      posts, through advance.js's buildMessage/post. The webhooks and
@@ -522,9 +713,129 @@ async function doAdvance(p, L) {
 
   return {
     changed: true,
-    commit: `${L.label}: advance to ${weekLabel(p.week)} (via ${p.actor})`,
-    summary: `Advanced to ${weekLabel(p.week)}, next deadline "${next}"${announced.note}`,
+    commit: `${L.label}: advance to ${label} (via ${p.actor})`,
+    summary:
+      `Advanced to ${label}, next deadline "${next}"${announced.note}` +
+      (syncNote ? ` · ${syncNote}` : ""),
   };
+}
+
+/* ------------------------------------------------------------
+   ROLLOVER — end the season, start the next one
+   ------------------------------------------------------------
+   The web front door to tools/rollover.js. Everything that matters
+   happens in there; this function's whole job is to check that the
+   season on disk is the season the commissioner was looking at, hand
+   the work over, and turn the result into a commit message and a
+   Discord post.
+
+   IT IS NOT AN ADVANCE and deliberately shares none of its code. An
+   advance rewrites four fields in league-data.js and can be undone by
+   advancing again. This copies five files into seasons/<year>/,
+   verifies the copy loads on its own, and only then empties the live
+   folder — polls, bracket, postseason and every schedule week. It is
+   recoverable, but by `git revert`, not by pressing the button again.
+
+   NOTHING IS DELETED, here or in rollover.js. That claim is the one
+   the confirmation on the admin page makes to the commissioner, so it
+   is worth being able to check it against this file.
+   ------------------------------------------------------------ */
+async function doRollover(p, L) {
+  const data = loadData(L.paths);
+  const onDisk = Number((data.SEASON || {}).year);
+
+  /* The stale-tab guard. See the note beside `year` in validate():
+     the page sends back the year it read, and a mismatch means the
+     two are not looking at the same season. Refusing is the only safe
+     answer — the alternative is archiving whatever happens to be in
+     the folder under a label the commissioner never saw. */
+  if (onDisk !== p.year) {
+    die(
+      `${L.dir}/league-data.js is on ${onDisk}, but the submission asked to archive ${p.year}.\n` +
+        `  Reload the admin page and look again before rolling over — this usually means the\n` +
+        `  rollover has already run, or the page has been open since before it did.`
+    );
+  }
+
+  /* runRollover() die()s on anything it won't do — an existing
+     archive, an archive that doesn't load, an unfinished season with
+     no acknowledgement — and a die() here fails the workflow run,
+     which is exactly right: a rollover that half-happened must be
+     loud. It never gets as far as touching a live file unless the
+     archive is already written and verified. */
+  const r = runRollover({ league: L, force: p.force, log: (m) => console.log(m) });
+
+  console.log(`\n  ${L.label} rolled over by ${p.actor}.`);
+  if (r.notes.length) {
+    console.log(`  Acknowledged before running:`);
+    r.notes.forEach((n) => console.log(`    - ${n}`));
+  }
+
+  const announced = await announcePreseason(p, L, r);
+
+  const detail =
+    `${r.year} archived to ${L.dir}/seasons/${r.year}/ (${r.files.length} files + archive.js). ` +
+    `${L.dir} is now ${r.nextYear} PRESEASON — ${r.cleared} schedule(s) emptied` +
+    (r.departed ? `, ${r.departed} departed coach(es) marked inactive` : ``) +
+    `.` +
+    (r.wireWarning ? ` WARNING: index.html not wired — ${r.wireWarning}.` : ``) +
+    announced.note;
+
+  return {
+    changed: true,
+    commit: `${L.label}: archive ${r.year} and roll over to ${r.nextYear} (via ${p.actor})`,
+    summary: detail,
+  };
+}
+
+/* The preseason post. Short on purpose — an advance announcement
+   exists to tell people what to do next, and there are no games to
+   play yet. So it leads with the thing there IS to do (recruiting)
+   and names the advance people are waiting on (Week 0).
+
+   IT SAYS NOTHING ABOUT THE ARCHIVE ON PURPOSE. The finished season's
+   files move to seasons/<year>/, but no page renders them: a visitor
+   can reach last year only through the power-rankings window and the
+   coach cards' career numbers. Standings, the bracket and the Top 25
+   weeks are the live season's alone. So a line pointing people at
+   "last season, still on the site" would be sending them somewhere
+   that doesn't exist yet. Add it back when a history view does.
+
+   Same non-fatal contract as announce() above: the archive is on disk
+   and must never be lost to a Discord outage. */
+async function announcePreseason(p, L, r) {
+  const cfg = loadDiscordConfig();
+  const url = cfg ? webhookUrl(cfg, L.slug) : "";
+
+  if (!url) {
+    console.log(
+      `  no Discord webhook for "${L.slug}" on the runner — rolled over without announcing.`
+    );
+    return { note: " — NOT announced (no webhook on runner)" };
+  }
+
+  const M = makeMentioner(cfg, L.slug);
+  const content = [
+    M.role,
+    `**We've advanced to the ${r.nextYear} preseason.**`,
+    ``,
+    `Build your recruiting board and get your staff set. Week 0 is the next advance — ` +
+      `that's when the season kicks off, so keep an eye out for it.`,
+    ``,
+    L.siteUrl,
+  ]
+    .filter((line) => line !== undefined)
+    .join("\n");
+
+  try {
+    await post(url, { content, allowed_mentions: M.allowed() });
+    console.log("  posted the preseason announcement to Discord.");
+    return { note: " \u00b7 announced in Discord" };
+  } catch (e) {
+    console.error(`  WARNING: preseason announcement FAILED — ${e.message}`);
+    console.error("  The rollover still stands; re-post by hand.");
+    return { note: " \u00b7 Discord announcement FAILED (see Actions log)" };
+  }
 }
 
 /* ------------------------------------------------------------
@@ -704,6 +1015,7 @@ async function main() {
   let result;
   if (p.action === "scores") result = doScores(p, L);
   else if (p.action === "deadline") result = doDeadline(p, L);
+  else if (p.action === "rollover") result = await doRollover(p, L);
   else result = await doAdvance(p, L);
 
   emit(result);
@@ -713,4 +1025,4 @@ if (require.main === module) {
   main().catch((e) => die(e.stack || e.message));
 }
 
-module.exports = { validate, ALLOWED_LEAGUES };
+module.exports = { validate, ALLOWED_LEAGUES, ROLLOVER_LEAGUES };

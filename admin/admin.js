@@ -75,8 +75,21 @@ const $ = (id) => document.getElementById(id);
    Mirrors seasonIndex() in script.js and tools/lib/league.js. Three
    copies because the browser, the site and Node don't share a module
    system; if you change one, change all three. */
+/* The one non-numeric value the advance picker can hold. Matches the
+   SENTINELS list in tools/lib/league.js — the string is what gets sent
+   and what ends up in league-data.js, so it is spelled exactly once
+   here and compared, never rebuilt. */
+const OFFSEASON = "OFFSEASON";
+/* The other sentinel. It is never a destination in the advance
+   picker — the rollover is the only way in — but it IS a state the
+   page has to render from, and it does not coerce like a week:
+   seasonIndex() sends it to 0 because nothing has happened yet. Every
+   place that reads position off that 0 has to check the raw value
+   first, exactly as the offseason does at the other end. */
+const PRESEASON = "PRESEASON";
+
 const seasonIndex = (value) => {
-  if (value === "PRESEASON") return 0;
+  if (value === PRESEASON) return 0;
   if (value === "OFFSEASON") return 19;
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
@@ -109,12 +122,25 @@ function scrollToMessage(el) {
   }
 }
 
-/* Week 14 and 15 carry names on the site; matching them here means
+/* Week 14 and 15 carry names on the site, and 16-19 are the game's
+   own Bowl Weeks 1-4, one per playoff round; matching them here means
    the dropdown reads the way the schedule does. */
+const BOWL_WEEK_NAME = {
+  16: "Bowl Week 1 — CFP First Round",
+  17: "Bowl Week 2 — CFP Quarterfinals",
+  18: "Bowl Week 3 — CFP Semifinals",
+  19: "Bowl Week 4 — National Championship",
+};
 function weekOptionLabel(w) {
+  /* The offseason is a state, not a week — the hold after the national
+     championship, while NIL, the portal and signing day run in
+     Discord. It reads as a destination in the advance picker and never
+     appears in the score picker, because it has no games. */
+  if (w === OFFSEASON) return "Offseason";
+  if (w === PRESEASON) return "Preseason";
   if (w === 14) return "Week 14 — Army-Navy";
   if (w === 15) return "Week 15 — Championships";
-  return `Week ${w}`;
+  return BOWL_WEEK_NAME[w] || `Week ${w}`;
 }
 
 /* ------------------------------------------------------------
@@ -255,6 +281,8 @@ $("signout-btn").addEventListener("click", () => {
   message($("scores-msg"), "");
   message($("advance-msg"), "");
   message($("deadline-msg"), "");
+  message($("rollover-msg"), "");
+  $("rollover-panel").classList.add("hidden");
   message($("vacation-msg"), "");
   $("vacation-list").innerHTML = "";
 });
@@ -327,8 +355,28 @@ function refreshWeekControls() {
   $("week-select").innerHTML = weekOpts.join("");
   $("week-select").value = String(Math.min(current, 19));
 
-  $("advance-week").innerHTML = weekOpts.join("");
-  $("advance-week").value = String(Math.min(current + 1, 19));
+  /* THE ADVANCE PICKER RUNS ONE PAST THE AXIS. After the national
+     championship there is no week 20 to move to, and offering 19 —
+     the week the league is already on — made "Advance" read as a
+     no-op on the one night of the year it matters most. The offseason
+     is the real next destination: a held state, announced in Discord
+     like any other advance, that the site sits in until the rollover
+     starts the next preseason.
+
+     It is deliberately NOT in the score picker above. Scores are
+     entered against schedule rows and the offseason has none. */
+  $("advance-week").innerHTML = weekOpts.join("") + opt(OFFSEASON);
+  /* Default to the NEXT destination, and the preseason's next
+     destination is Week 0, not Week 1. Read from the raw value: the
+     preseason coerces to 0, so current + 1 would offer Week 1 and
+     skip the opener — the same class of error the offseason's
+     coercion causes at the other end of the axis. */
+  $("advance-week").value =
+    data.SEASON.currentWeek === PRESEASON
+      ? "0"
+      : current >= 19
+        ? OFFSEASON
+        : String(current + 1);
 
   /* Prefill from the stored timestamp, not from the sentence — the
      sentence is generated and can't be parsed back reliably. A league
@@ -342,11 +390,27 @@ function refreshWeekControls() {
   renderDeadlinePreview("advance");
   renderDeadlinePreview("deadline");
 
+  /* Read from the raw value, not from the coerced index. Both
+     sentinels coerce so every week-axis question gets the right
+     answer, and this line is where that coercion would show through
+     as a lie in both directions: "Currently on BOWL WEEK 4" a week
+     after the title game, and "Currently on WEEK 0" for a league
+     that has only just rolled over and hasn't kicked off. */
   $("current-week").textContent =
-    `Currently on ${weekOptionLabel(current).toUpperCase()}` +
+    `Currently on ${weekOptionLabel(
+      data.SEASON.currentWeek === OFFSEASON ||
+        data.SEASON.currentWeek === PRESEASON
+        ? data.SEASON.currentWeek
+        : current
+    ).toUpperCase()}` +
     (data.SEASON.nextAdvance ? ` · next deadline ${data.SEASON.nextAdvance}` : "");
 
   renderGames();
+
+  /* Not awaited: it fetches postseason-data.js to work out what to
+     warn about, and nothing else on this page waits on that. The
+     panel stays hidden until it resolves, which is the right default. */
+  renderRollover();
 }
 
 /* Both of these drop any optimistic paint. The pending set is keyed
@@ -1056,9 +1120,14 @@ function renderDeadlinePreview(which) {
   el.classList.remove("bad");
 
   if (d === null) {
+    /* Only the offseason may leave the advance date blank — say so here
+       rather than letting the picker read like a field the commissioner
+       forgot to fill in. */
     el.textContent =
       which === "deadline"
         ? "No date — the deadline badge will be hidden."
+        : $("advance-week").value === OFFSEASON
+        ? "Optional for the offseason — leave blank to hide the deadline badge."
         : "Pick a date and the site will read: …";
     return;
   }
@@ -1075,12 +1144,28 @@ function renderDeadlinePreview(which) {
   $(`${which}-time`).addEventListener("input", () => renderDeadlinePreview(which));
 });
 
+$("advance-week").addEventListener("change", () => renderDeadlinePreview("advance"));
+
+/* The picker's value is a week number OR the offseason sentinel, and
+   the two must not be flattened: Number("OFFSEASON") is NaN, which
+   would sail through as a week and die on the runner. Everything
+   downstream branches on isOffseason() instead of coercing. */
+const advanceTarget = () => {
+  const raw = $("advance-week").value;
+  return raw === OFFSEASON ? OFFSEASON : Number(raw);
+};
+
 $("advance-btn").addEventListener("click", () => {
-  const week = Number($("advance-week").value);
+  const week = advanceTarget();
   const msg = $("advance-msg");
 
   const deadline = readDeadline("advance");
-  if (deadline === null) {
+  /* THE OFFSEASON IS THE ONE ADVANCE WITH NO DEADLINE TO SET. Its
+     steps are announced in Discord, so the site has nothing to count
+     down to and league-data.js documents an empty deadline as the way
+     to hide the badge. A date is still allowed — some leagues like to
+     post the rollover date — but a blank one is no longer an error. */
+  if (deadline === null && week !== OFFSEASON) {
     message(msg, "error", "Pick a deadline date — it's what coaches see on the site.");
     return;
   }
@@ -1088,26 +1173,54 @@ $("advance-btn").addEventListener("click", () => {
     message(msg, "error", "That deadline isn't a valid date.");
     return;
   }
-  const next = deadline.text;
+  const next = deadline ? deadline.text : "";
 
   const current = seasonIndex(data.SEASON.currentWeek);
-  const wk = WeekCore.buildWeek(data, week);
+  const offseason = week === OFFSEASON;
+  /* The preseason sits BEFORE week 0, but coerces to 0 like the
+     opener itself. Comparing against that 0 called the first advance
+     of the year a move backwards. -1 is the honest position for the
+     comparisons below, and it makes the skip count right too:
+     preseason to Week 3 skips three weeks, not two. */
+  const from = data.SEASON.currentWeek === PRESEASON ? -1 : current;
+
+  /* buildWeek on the sentinel finds no entry for any team, so the
+     count sentence would read "0 head-to-head and 0 CPU game(s)" —
+     true, and misleading, because it describes a week rather than the
+     end of the season. The offseason gets its own sentence instead. */
+  const wk = offseason ? null : WeekCore.buildWeek(data, week);
 
   let warn = "";
-  if (week <= current) {
+  if (offseason) {
+    /* The only backwards move worth flagging here is entering the
+       hold before the title game has been played. */
+    if (current < 19) {
+      warn = ` The season isn't over — ${weekOptionLabel(current)} is still the current week.`;
+    }
+  } else if (week <= from) {
     warn = ` This moves the league BACKWARDS from ${weekOptionLabel(current)}.`;
-  } else if (week > current + 1) {
-    warn = ` This skips ${week - current - 1} week(s).`;
+  } else if (week > from + 1) {
+    warn = ` This skips ${week - from - 1} week(s).`;
   }
 
   message(msg, "");
   $("advance-confirm-text").innerHTML =
-    `${esc(leagueLabel($("league-select").value))} will move to ` +
-    `<span class="what">${esc(weekOptionLabel(week))}</span>, with ` +
-    `<span class="what">${wk.league.length} head-to-head</span> and ` +
-    `<span class="what">${wk.cpu.length} CPU</span> game(s).<br>` +
-    `Coaches will see the deadline <span class="what">${esc(next)}</span>.` +
-    (warn ? `<br><strong>${esc(warn.trim())}</strong>` : "");
+    offseason
+      ? `${esc(leagueLabel($("league-select").value))} will move to ` +
+        `<span class="what">the Offseason</span> — the season is complete and the ` +
+        `site holds here, showing the finished bracket, champion and final standings.<br>` +
+        `NIL, the portal and signing day are announced in Discord from here. ` +
+        `Nothing is archived by this: next season starts with a separate rollover.<br>` +
+        (next
+          ? `Coaches will see the deadline <span class="what">${esc(next)}</span>.`
+          : `No deadline will be shown — the countdown badge is hidden for the hold.`) +
+        (warn ? `<br><strong>${esc(warn.trim())}</strong>` : "")
+      : `${esc(leagueLabel($("league-select").value))} will move to ` +
+        `<span class="what">${esc(weekOptionLabel(week))}</span>, with ` +
+        `<span class="what">${wk.league.length} head-to-head</span> and ` +
+        `<span class="what">${wk.cpu.length} CPU</span> game(s).<br>` +
+        `Coaches will see the deadline <span class="what">${esc(next)}</span>.` +
+        (warn ? `<br><strong>${esc(warn.trim())}</strong>` : "");
 
   $("advance-form").classList.add("hidden");
   $("advance-confirm").classList.remove("hidden");
@@ -1121,13 +1234,13 @@ $("advance-no").addEventListener("click", () => {
 $("advance-yes").addEventListener("click", async () => {
   const btn = $("advance-yes");
   const msg = $("advance-msg");
-  const week = Number($("advance-week").value);
+  const week = advanceTarget();
 
   /* Re-read rather than trusting what step one showed. The pickers
      are still on the page behind the confirmation, and this is the
      click that actually sends. */
   const deadline = readDeadline("advance");
-  if (!deadline) {
+  if (deadline === false || (deadline === null && week !== OFFSEASON)) {
     message(msg, "error", "The deadline stopped being valid — pick it again.");
     return;
   }
@@ -1146,7 +1259,10 @@ $("advance-yes").addEventListener("click", async () => {
            sentence from it with the same code the command-line tool
            uses, so the site and Discord can't end up describing the
            same deadline differently. */
-        nextAt: deadline.at,
+        /* "" is a deliberate clear, not a missing value — apply.js
+           reads the two differently, and the offseason wants the
+           clear. */
+        nextAt: deadline ? deadline.at : "",
         confirm: true,
       },
     });
@@ -1159,7 +1275,10 @@ $("advance-yes").addEventListener("click", async () => {
 
     const fresh = await waitForPublish(
       $("league-select").value,
-      (d) => Number(d.SEASON.currentWeek) === week,
+      (d) =>
+        week === OFFSEASON
+          ? d.SEASON.currentWeek === OFFSEASON
+          : Number(d.SEASON.currentWeek) === week,
       (secs) => message(msg, "warn", `Sent. Waiting for the site to publish… (${secs}s)`)
     );
 
@@ -1169,7 +1288,13 @@ $("advance-yes").addEventListener("click", async () => {
          the advance that just happened. */
       data = fresh;
       refreshWeekControls();
-      message(msg, "ok", `Done — the league is now on ${weekOptionLabel(week)}, live on the site.`);
+      message(
+        msg,
+        "ok",
+        week === OFFSEASON
+          ? `Done — the league is now in the Offseason, live on the site.`
+          : `Done — the league is now on ${weekOptionLabel(week)}, live on the site.`
+      );
     } else {
       message(
         msg,
@@ -1260,6 +1385,260 @@ $("deadline-btn").addEventListener("click", async () => {
         "warn",
         "Sent, but the site still hasn't updated after 3 minutes.\n" +
           "Reload this page in a few minutes to check before sending it again."
+      );
+    }
+  } catch (err) {
+    message(msg, "error", err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+
+/* ============================================================
+   ADVANCE TO PRESEASON — the rollover
+   ------------------------------------------------------------
+   The once-a-year button. It archives the finished season into
+   <league>/seasons/<year>/ and starts the next one, and it is the
+   only control on this page whose effect is not a week's worth of
+   data that a later submission corrects.
+
+   THREE THINGS KEEP IT OUT OF THE WAY UNTIL IT IS WANTED:
+
+     1. The panel is hidden unless this league's currentWeek is the
+        literal string "OFFSEASON". You cannot reach it without
+        having already ended the season with the advance above, so
+        for eleven months of the year it does not exist.
+
+     2. The readiness notes below are the same sentences
+        readiness() prints in tools/rollover.js, computed from the
+        same published files. When there are any, the button is
+        replaced by a tick-box: this is the web's --force, and it
+        is deliberately not a checkbox that is always there, because
+        one that is always there is one nobody reads.
+
+     3. The confirmation names the destination folder, the year
+        being archived and the year being started, and says what
+        happens to departed coaches — everything §4.8 of
+        docs/SCOPING-offseason-and-season-rollover.md asks for.
+
+   Everything real happens in tools/rollover.js on the Actions
+   runner. This file decides nothing: it shows what that tool is
+   about to do, and sends the year it was looking at so a tab left
+   open since before a rollover can't archive a season twice.
+   ============================================================ */
+const ROLLOVER_LEAGUES = ["scbthunderdome"];
+
+/* Readiness needs postseason-data.js, which loadLeagueData() doesn't
+   fetch — the scores tab has no use for it. Pulled on its own here so
+   the notes shown match the ones the runner will compute rather than
+   guessing from the schedules alone. A league with no such file is a
+   legitimate state, not an error, so a failed fetch reads as "no
+   postseason recorded" and the note stands. */
+async function loadPostseason(slug) {
+  try {
+    const src = await fetchText(`../${slug}/postseason-data.js`);
+    return new Function(`
+      ${src}
+      return typeof POSTSEASON !== "undefined" ? POSTSEASON : null;
+    `)();
+  } catch (e) {
+    return null;
+  }
+}
+
+/* A mirror of readiness() in tools/rollover.js. Kept in step by hand,
+   like seasonIndex() is in three places — the browser and Node don't
+   share a module system. If the two ever disagree the runner wins:
+   it refuses, and this only ever asks. */
+function rolloverNotes(season, schedules, postseason) {
+  const notes = [];
+  const week = season.currentWeek;
+
+  if (week !== OFFSEASON) {
+    notes.push(
+      week === PRESEASON
+        ? `This league is already in the preseason — it looks like it has rolled over.`
+        : `The league is on ${weekOptionLabel(seasonIndex(week))}, not in the offseason.`
+    );
+  }
+
+  const rounds = (postseason && postseason.rounds) || [];
+  const nc = rounds.find((r) => r.id === "cfp-nc");
+  const ncPlayed = ((nc && nc.games) || []).some(
+    (g) => g.homeScore != null && g.awayScore != null
+  );
+  const ncInSchedule = (schedules || []).some((t) =>
+    (t.weeks || []).some(
+      (w) => w.round === "cfp-nc" && w.teamScore != null && w.opponentScore != null
+    )
+  );
+  if (!ncPlayed && !ncInSchedule) {
+    notes.push(
+      `No national championship result is recorded, in postseason-data.js or in any ` +
+        `schedule. That is normal for a league with nobody in the playoff, and a sign the ` +
+        `season isn't finished for one that had somebody in it.`
+    );
+  }
+
+  return notes;
+}
+
+/* What the panel currently believes, so the click handlers don't
+   recompute it and can't disagree with what was on screen. */
+let rolloverState = null;
+
+async function renderRollover() {
+  const panel = $("rollover-panel");
+  const slug = $("league-select").value;
+  const season = (data && data.SEASON) || {};
+
+  const eligible = ROLLOVER_LEAGUES.includes(slug) && season.currentWeek === OFFSEASON;
+
+  /* Always reset to the closed state first. Switching leagues while a
+     confirmation is open must not leave it open over a different
+     dynasty's data — the same reason switchLeague() resets the
+     advance confirmation. */
+  $("rollover-confirm").classList.add("hidden");
+  $("rollover-form").classList.remove("hidden");
+  message($("rollover-msg"), "");
+  panel.classList.toggle("hidden", !eligible);
+  rolloverState = null;
+  if (!eligible) return;
+
+  const year = Number(season.year);
+  const nextYear = year + 1;
+
+  $("rollover-hint").innerHTML =
+    `The offseason hold is over. This archives <strong>${esc(String(year))}</strong> to ` +
+    `<code>${esc(slug)}/seasons/${esc(String(year))}/</code> — roster, schedules, polls, ` +
+    `bracket and postseason — and starts <strong>${esc(String(nextYear))}</strong> with an ` +
+    `empty schedule. Nothing is deleted, and the archive is read-only afterwards.`;
+
+  const postseason = await loadPostseason(slug);
+
+  /* The league may have been switched while that fetch was in flight.
+     Re-check before painting anything from it. */
+  if ($("league-select").value !== slug) return;
+
+  const notes = rolloverNotes(season, data.TEAM_SCHEDULES, postseason);
+  rolloverState = { slug, year, nextYear, notes };
+
+  const box = $("rollover-notes");
+  if (!notes.length) {
+    box.innerHTML = "";
+    $("rollover-btn").disabled = false;
+    return;
+  }
+
+  box.innerHTML =
+    `<div class="ro-notes"><strong>Before you do:</strong><ul>` +
+    notes.map((n) => `<li>${esc(n)}</li>`).join("") +
+    `</ul></div>` +
+    `<label class="ro-ack"><input type="checkbox" id="rollover-ack">` +
+    `<span>I've read the above and want to archive ${esc(String(year))} anyway.</span></label>`;
+
+  /* The button stays disabled until the box is ticked. The tick-box
+     is created fresh each render, so the listener goes on here rather
+     than at load. */
+  $("rollover-btn").disabled = true;
+  $("rollover-ack").addEventListener("change", (e) => {
+    $("rollover-btn").disabled = !e.target.checked;
+  });
+}
+
+$("rollover-btn").addEventListener("click", () => {
+  /* Belt and braces with the `disabled` attribute. A disabled button
+     ignores a real click, but the state that disables it is the
+     unticked acknowledgement, and this is the one control on the page
+     where "the guard was only visual" would be expensive. */
+  if ($("rollover-btn").disabled) return;
+  if (!rolloverState) return;
+  const { year, nextYear, notes } = rolloverState;
+  const label = leagueLabel($("league-select").value);
+
+  message($("rollover-msg"), "");
+  $("rollover-confirm-text").innerHTML =
+    `<span class="what">${esc(label)}</span> will archive the ` +
+    `<span class="what">${esc(String(year))}</span> season to ` +
+    `<span class="what">${esc(rolloverState.slug)}/seasons/${esc(String(year))}/</span> — ` +
+    `roster, schedules, polls, bracket and postseason — and start ` +
+    `<span class="what">${esc(String(nextYear))}</span> with an empty schedule.<br>` +
+    `Coaches carry forward with their teams. Anyone who left mid-season is marked ` +
+    `inactive rather than carried into ${esc(String(nextYear))}.<br>` +
+    `<strong>Nothing is deleted</strong> — the archive is a copy, every file rewritten is in ` +
+    `git, and the site keeps showing ${esc(String(year))} in career records and trophies.` +
+    (notes.length
+      ? `<br><strong>Going ahead despite ${notes.length} warning(s) above.</strong>`
+      : "");
+
+  $("rollover-form").classList.add("hidden");
+  $("rollover-confirm").classList.remove("hidden");
+});
+
+$("rollover-no").addEventListener("click", () => {
+  $("rollover-confirm").classList.add("hidden");
+  $("rollover-form").classList.remove("hidden");
+});
+
+$("rollover-yes").addEventListener("click", async () => {
+  const btn = $("rollover-yes");
+  const msg = $("rollover-msg");
+  if (!rolloverState) return;
+  const { slug, year, nextYear, notes } = rolloverState;
+
+  btn.disabled = true;
+  message(msg, "warn", "Archiving…");
+
+  try {
+    await api("/submit", {
+      code: accessCode,
+      payload: {
+        action: "rollover",
+        league: slug,
+        /* The year this page was looking at. apply.js compares it
+           with SEASON.year on disk and refuses a mismatch, which is
+           what makes a stale tab harmless. */
+        year,
+        /* The web's --force. False when there was nothing to warn
+           about; true only because a tick-box was found and read. */
+        force: notes.length > 0,
+        confirm: true,
+      },
+    });
+
+    $("rollover-confirm").classList.add("hidden");
+    $("rollover-form").classList.remove("hidden");
+
+    message(msg, "warn", "Sent. Waiting for the site to publish…");
+    scrollToMessage(msg);
+
+    /* A rollover rewrites more files than an advance does, so the
+       check is both halves of the new state: the year has moved on
+       AND the season reads PRESEASON. Either alone could be a
+       half-published deploy. */
+    const fresh = await waitForPublish(
+      slug,
+      (d) => d.SEASON.currentWeek === PRESEASON && Number(d.SEASON.year) === nextYear,
+      (secs) => message(msg, "warn", `Sent. Waiting for the site to publish… (${secs}s)`)
+    );
+
+    if (fresh) {
+      data = fresh;
+      refreshWeekControls();
+      message(
+        msg,
+        "ok",
+        `Done — ${year} is archived and ${nextYear} is live. Next: roster changes for ` +
+          `${nextYear}, then transcribe the schedules.`
+      );
+    } else {
+      message(
+        msg,
+        "warn",
+        "Sent, but the site still hasn't updated after 3 minutes.\n" +
+          "Check the Actions run before trying again — a rollover refuses to run twice, " +
+          "so nothing is at risk either way."
       );
     }
   } catch (err) {

@@ -1,0 +1,101 @@
+# SCBThunderDome.github.io — working notes
+
+## Bowl-week CFP bracket screenshots (weeks 16–19)
+
+When a CFP bracket screenshot comes in for **any** dynasty after the field is
+final (week 15/16 onward), two files get updated, not one:
+
+1. **`<league>/postseason-data.js`** — via `node tools/cfp.js --league <slug>
+   --week N --results results.txt`. This writes the CPU-only results and
+   cross-checks the coached games against the schedule. Never hand-edit it.
+
+2. **`<league>/schedule-data.js`** — the **next round's matchups for coached
+   teams**, as unplayed rows (no `teamScore` / `opponentScore`). This used to be
+   a hand edit and was the step that got forgotten. It is now a tool:
+
+   ```
+   node tools/bracket-sync.js --league <slug> --week N
+   ```
+
+   **A web advance now runs this itself, for every league.** Advancing
+   into weeks 16-19 from the admin page derives that round before the
+   Discord announcement is built, and a score entered during a bowl week
+   re-derives the round the league is in — which is what catches a result
+   that lands after the advance. So this is normally a check, not a
+   chore. Run it by hand when you want the rows early, or when the
+   Actions log warned it couldn't read the bracket (still projected, or
+   not entered yet — that warns and lets the advance stand, it never
+   fails it).
+
+   It derives the round from the final `CFP_BRACKET` and the results already
+   recorded — the same union the site's own bracket reads — and writes only the
+   rows a coached team needs. It never writes a CPU-vs-CPU game, never touches
+   a row that already exists, and never guesses a result, so it is safe to run
+   every bowl week and safe to re-run. `--dry-run` shows the matchups first;
+   check them against the screenshot before writing.
+
+   Run it **after** the results for the previous round are in, in that order —
+   a round can't be derived until the one feeding it is final.
+
+Row shape, which is what the tool emits and what a hand-added row should match:
+
+```js
+{ week: 18, opponent: "Maryland", location: "at", neutral: true,
+  title: "Orange Bowl", round: "cfp-sf" },
+```
+
+- `week`: 16 = cfp-r1, 17 = cfp-qf, 18 = cfp-sf, 19 = cfp-nc.
+- `round`: the matching `cfp-*` id. Load-bearing — the bracket advances on it.
+- `location`: `"vs"` if the coached team is the higher seed, `"at"` if lower.
+  Always `neutral: true` from the quarterfinals on (first round is on campus,
+  so no `neutral` there, and both rows name the host's stadium).
+- `title`: the bowl name off the logo, plain form — "Orange Bowl", not
+  "Capital One Orange Bowl".
+- **Only coached teams get schedule rows.** A CPU-vs-CPU playoff game lives
+  solely in `postseason-data.js`; a team whose coach has departed
+  (`departedAfterWeek`) counts as CPU. The two places must never hold the same
+  game.
+
+The final bracket itself still goes in `cfp-data.js` at **week 15** with
+`--final` — weeks 16–19 take `--results` only, so there is nowhere else for the
+settled field to live, and `bracket-sync.js` refuses to write off a bracket
+still marked projected.
+
+Semifinal/championship bowl names can't be added to `cfp-data.js` in a bowl
+week for the same reason. The `title` on the schedule row is where they land.
+
+As always: the tools edit files and stop. Don't commit or push.
+
+## The rollover (end of the offseason hold)
+
+Ending a season is **Advance to Preseason** on the admin page. It only
+appears while that league's `currentWeek` is `"OFFSEASON"`, so getting
+there is two steps, in this order:
+
+1. Advance to *Offseason* on the advance picker — the hold. Deadline
+   fields may be left blank; that hides the countdown badge, which is
+   what you want while the nine in-game steps run in Discord.
+2. Advance to Preseason — archives the year into
+   `<league>/seasons/<year>/` and starts the next one.
+
+Both run through `tools/apply.js` on the Actions runner, same as an
+advance. `tools/rollover.js --dry-run` shows exactly what step 2 will
+do without writing anything, and is worth running first.
+
+**Roster edits happen after the archive, never before.** The archive
+freezes who coached which school that year; editing first produces an
+archive that is quietly wrong and never errors. The tool enforces the
+order — it archives, verifies the archive loads, and only then touches
+a live file — so the rule you have to keep is just "don't hand-edit
+league-data.js during the hold".
+
+Coaches carry forward whole. Anyone with `departedAfterWeek: N` is
+rewritten as `active: false`; reinstating them later is deleting that
+flag.
+
+If the season looks unfinished — no national championship recorded,
+say — the page shows the warning and makes you tick a box. That is the
+web's `--force`. For a Group-of-5 league with nobody in the playoff
+that warning is expected and fine.
+
+As always: the tools edit files and stop. Don't commit or push.

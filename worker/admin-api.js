@@ -22,6 +22,11 @@
 
      POST /submit   { code, payload: { action, league, week, ... } }
        -> { ok: true, queued: true }
+       action is "scores", "advance" or "rollover". The last one
+       has no week: it archives a finished season into
+       <league>/seasons/<year>/ and starts the next one, and it
+       carries the year it believes it is archiving so a stale tab
+       can't end a season nobody is looking at.
 
      POST /vacation { payload: { coach, start, end } }
        -> { ok: true, queued: true }
@@ -71,7 +76,16 @@ const POST_ZONE = "America/New_York";
    checked against. */
 const SCORE_LEAGUES = ["scbthunderdome"];
 const ADVANCE_LEAGUES = ["scbthunderdome"];
-const ALLOWED_LEAGUES = [...new Set([...SCORE_LEAGUES, ...ADVANCE_LEAGUES])];
+
+/* The once-a-year action: archive a finished season and start the
+   next one. Its own list, mirroring ROLLOVER_LEAGUES in apply.js, so
+   "may advance the week" and "may end the season" stay separate
+   answers even while they hold the same league. */
+const ROLLOVER_LEAGUES = ["scbthunderdome"];
+
+const ALLOWED_LEAGUES = [
+  ...new Set([...SCORE_LEAGUES, ...ADVANCE_LEAGUES, ...ROLLOVER_LEAGUES]),
+];
 
 const MIN_CODE_LENGTH = 16;
 
@@ -330,10 +344,36 @@ function checkPayload(payload, who) {
      below rather than threaded through them. */
   if (action === "vacation") return checkVacation(payload);
 
-  if (action !== "scores" && action !== "advance" && action !== "deadline") {
+  if (
+    action !== "scores" &&
+    action !== "advance" &&
+    action !== "deadline" &&
+    action !== "rollover"
+  ) {
     return "unknown action";
   }
   if (!ALLOWED_LEAGUES.includes(league)) return "unknown league";
+
+  /* A ROLLOVER HAS NO WEEK — it ends the axis rather than moving
+     along it — so it is answered here, above every week check. Shape
+     only, as everywhere else on this Worker: tools/rollover.js on the
+     runner is what decides whether the season is actually finished,
+     and tools/apply.js re-checks the year against the file on disk. */
+  if (action === "rollover") {
+    if (!ROLLOVER_LEAGUES.includes(league)) return `${league} can't be rolled over from the web`;
+    if (!who.leagues.includes(league)) return `your code doesn't cover ${league}`;
+    if (payload.confirm !== true) return "rollover was not confirmed";
+    /* Echoed back from the page so a stale tab can't archive a season
+       nobody is looking at. apply.js compares it with SEASON.year on
+       disk and refuses a mismatch; this is only the format check. */
+    if (!Number.isInteger(payload.year) || payload.year < 2000 || payload.year > 2200) {
+      return "rollover year must be a whole year like 2026";
+    }
+    if (payload.force !== undefined && typeof payload.force !== "boolean") {
+      return "rollover force must be true or false";
+    }
+    return null;
+  }
 
   /* Which leagues this action may touch — the same split apply.js
      enforces. Today all three appear in both lists; the guard stays
@@ -360,7 +400,15 @@ function checkPayload(payload, who) {
      team played lives in that team's schedule rows like any other
      game, so weeks 16-19 have rows to write into; only CPU-vs-CPU
      games stay in postseason-data.js, and no coach submits those. */
-  if (!Number.isInteger(week) || week < 0 || week > 19) return "week must be 0-19";
+  /* "OFFSEASON" is the one non-numeric week, and only an advance may
+     carry it: it is the hold after the national championship, so
+     there is nothing there to score. Shape only — tools/lib/league.js
+     owns the canonical sentinel list and apply.js re-checks against
+     it on the runner. */
+  const offseason = action === "advance" && week === "OFFSEASON";
+  if (!offseason && (!Number.isInteger(week) || week < 0 || week > 19)) {
+    return action === "advance" ? "week must be 0-19 or OFFSEASON" : "week must be 0-19";
+  }
 
   if (action === "scores") {
     if (!Array.isArray(payload.entries) || !payload.entries.length) return "no scores submitted";

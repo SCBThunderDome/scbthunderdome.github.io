@@ -84,7 +84,7 @@ as `script.js`, so what Discord says always matches what the site shows.
 
 | Flag | Meaning |
 |---|---|
-| `--week N` | Week now being played, 0–15. Required. |
+| `--week N` | Week now being played, 0–19, or `offseason`. Required. |
 | `--next "..."` | Next advance deadline, **as a date**: `2026-08-13 23:00`, or `2026-08-13` for a day with no time shown. Eastern. Carries over the existing value if omitted. `--at` is an alias. |
 | `--status "..."` | Override the hero status line. Defaults to `WEEK N`. |
 | `--dry-run` | Print the message. Change nothing, post nothing. |
@@ -93,6 +93,43 @@ as `script.js`, so what Discord says always matches what the site shows.
 
 **Always dry-run first** if you're unsure — it shows the exact matchup
 list and flags any coach missing an entry for that week.
+
+### Ending the season: `--week offseason`
+
+There is no week 20. After the national championship the league moves
+into the **offseason** — a single held state, not nine weeks — and that
+is a real advance with a real Discord announcement, so it goes through
+this tool like every other one:
+
+```
+node tools/advance.js --week offseason --next ""
+```
+
+`--next ""` is a deliberate clear: the offseason's steps are announced
+in Discord, so the site has nothing to count down to and the deadline
+badge hides itself. Omitting `--next` carries the title game's deadline
+forward instead, which is almost never what you want here.
+
+It writes `currentWeek: "OFFSEASON"` (quoted — a bare identifier there
+would throw on every page load) and `statusLine: "OFFSEASON"`. The
+status line is free text and is where the nine in-game steps get their
+narrative for free: `--status "OFFSEASON · TRANSFER PORTAL"`, later
+`--status "OFFSEASON · SIGNING DAY"`. No second clock, no new week
+numbers.
+
+Neither gate applies: the poll gate would demand a CFP Top 25 that
+stopped being published in December, and the bowl-round warning would
+report on rounds that are all finished.
+
+**The offseason is the end of this tool's job.** What starts 2027 is
+`tools/rollover.js`, which archives the season first — see below.
+
+**From the admin page** the same advance is the last option on the
+Advance picker, labelled *Offseason*, and it is the default once the
+league reaches Bowl Week 4. The deadline field is optional there, and
+only there. It is deliberately absent from the **score** picker: the
+offseason has no schedule rows to write into. Covered by
+`tools/test-admin-offseason.js`.
 
 ### The deadline is a date now, not a sentence
 
@@ -936,6 +973,106 @@ first round.
 Same renderer draws the week-10 projection and the finished bracket;
 there is no separate display mode to keep in sync.
 
+## bracket-sync.js
+
+Writes the next playoff round onto the coached teams' schedules.
+
+```
+node tools/bracket-sync.js --week 16
+node tools/bracket-sync.js --week 17 --dry-run
+```
+
+| flag | |
+|---|---|
+| `--league SLUG` | `scbthunderdome` (the only league). Optional. |
+| `--week N` | the bowl week to fill in, 16-19. Required. |
+| `--dry-run` | show the matchups and the rows. Write nothing. |
+| `--allow-projected` | derive from a bracket still marked projected. Looking only. |
+
+### What it's for
+
+A CFP game a coach plays is a row on that coach's schedule, and the
+admin page can only paint a score onto a row that already exists. So a
+missing row doesn't just look wrong — it stops the quarterfinal being
+entered, which stops the bracket advancing, which means the semifinal
+row is missing too. Adding those rows by hand was the step that got
+forgotten, and it was the worst one to forget.
+
+### What it derives, and from what
+
+Nothing here is a new fact:
+
+- the **field** is the last `CFP_BRACKET` block in `cfp-data.js`, which
+  must be `--final` (or you pass `--allow-projected` and don't write);
+- the **pairings** are arithmetic on the seed list — 5v12 / 6v11 /
+  7v10 / 8v9, winners meeting the bye seed that completes 13 — the same
+  arithmetic `script.js` does to draw the tree;
+- the **results** that decide who advances come from the same two
+  places the site reads: coached teams' schedule rows first, then
+  `postseason-data.js`.
+
+That last point is the reason this is a separate tool and not part of
+`advance.js`: it reads the identical union `cfpGameWinner()` reads, so
+the rows it writes and the bracket the site draws cannot disagree.
+
+### What it refuses to do
+
+- **Never writes a CPU-vs-CPU game.** That game has no schedule to live
+  on and belongs in `postseason-data.js` via `cfp.js --results`. The two
+  files must never hold the same game, so it reports the matchup and
+  stops.
+- **Never touches an existing row**, scored or not. Re-running is safe
+  and near-silent, which is what makes it something you can run every
+  bowl week without thinking about it.
+- **Never invents a result.** A round whose feeders aren't final yet
+  prints the matchups it knows and names what it's waiting on.
+
+### Home, away and the bowl name
+
+First round is on campus: the better seed hosts, and both rows carry
+that team's stadium — read off its own home games this season rather
+than from a table here. From the quarterfinals on every row is
+`neutral: true` with no stadium, because the fact the repo holds about
+a bowl site is its NAME, and that goes on `title` (merged forward key
+by key from the brackets, same as the site does).
+
+### The web advance runs this for you
+
+Since the semifinals of 2026 this is wired into `apply.js`, so every
+league gets it without anyone remembering:
+
+- an **advance into weeks 16-19** derives that round before the Discord
+  announcement is built, so the message names the matchups;
+- a **score entered while the league is in a bowl week** re-derives the
+  round it is currently in, which is what catches the result that lands
+  after the advance rather than before it;
+- re-submitting an advance that changed nothing still commits rows the
+  sync wrote — resubmitting is the obvious fix when a round's matchups
+  never appeared, and it now works.
+
+Re-running writes nothing when the rows exist, so both hooks are silent
+on every pass but the one that matters. A bracket it can't read — still
+projected, not entered, a round short — is a **warning in the Actions
+log, never a failed advance**: the season file is written by the time
+the sync is asked, so nothing in `bracket-sync.js` may exit the process.
+That is why `syncRound()` throws `BracketSyncError` and the CLI, not the
+library, is what calls `die()`.
+
+Running it by hand is still fine and still the way to fill a round in
+early, or to check with `--dry-run` before a screenshot goes in.
+
+### The usual order in a bowl week
+
+```
+node tools/cfp.js --week 16 --results results.txt   # the CPU games
+node tools/bracket-sync.js --week 17                # next round's rows
+```
+
+Results first: a round's matchups can't be derived until the round
+before it is final. The CPU-only games have no automatic path — a web
+advance can write a coached team's row, but a CPU-vs-CPU playoff game
+belongs in `postseason-data.js` and still arrives through `cfp.js`.
+
 ## rollover.js
 
 Archives a finished season and resets the folder for the next one.
@@ -977,6 +1114,28 @@ the file already says it is: delete the flag.
 
 It deletes nothing. The archive is a copy and every live file it
 rewrites is in git, so a rollover you didn't mean is a revert.
+
+**There is a button for this now.** The admin page grows an *Advance to
+Preseason* panel while a league's `currentWeek` is `"OFFSEASON"`, and
+nowhere else in the year. It reaches this same file through
+`tools/apply.js` on the Actions runner — `runRollover()` is the one
+implementation of the archive-then-reset sequence and the web path
+calls it rather than repeating it.
+
+Two differences from the command line, both deliberate:
+
+- `--force` becomes a tick-box that only exists when there is something
+  to warn about, with the same sentences `readiness()` prints here.
+- The page sends back the **year it was looking at**, and `apply.js`
+  refuses if that disagrees with `SEASON.year` on disk. That is what
+  makes a tab left open across a rollover harmless.
+
+The web path also posts a short preseason announcement to the league's
+Discord — "the season is archived, not deleted; the next one is live" —
+through the same `post()` an advance uses, and a failed post never
+costs the rollover.
+
+Regression test: `node tools/test-admin-rollover.js` (needs jsdom).
 
 ## find-tools.cmd
 

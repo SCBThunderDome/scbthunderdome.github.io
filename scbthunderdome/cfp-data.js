@@ -381,4 +381,25 @@ const CFP_BRACKET = [
       { seed: 12, team: "UNLV", record: "10-2", auto: true },
     ],
   },
+  {
+    week: 15,
+    projected: true,
+    seeds: [
+      { seed:  1, team: "SMU", record: "13-0", auto: true },
+      { seed:  2, team: "Kentucky", record: "11-1" },
+      { seed:  3, team: "South Carolina", record: "11-1", auto: true },
+      { seed:  4, team: "UCLA", record: "11-1" },
+      { seed:  5, team: "Oklahoma State", record: "12-0", auto: true },
+      { seed:  6, team: "Oklahoma", record: "10-2" },
+      { seed:  7, team: "Houston", record: "11-1" },
+      { seed:  8, team: "Ole Miss", record: "10-2" },
+      { seed:  9, team: "Wisconsin", record: "10-2", auto: true },
+      { seed: 10, team: "BYU", record: "10-2" },
+      { seed: 11, team: "Duke", record: "10-2" },
+      { seed: 12, team: "UNLV", record: "10-2", auto: true },
+    ],
+    bowls: {
+      qf: ["Rose Bowl", "Peach Bowl", "Cotton Bowl", "Fiesta Bowl"],
+    },
+  },
 ];

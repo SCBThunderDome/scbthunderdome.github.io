@@ -48,10 +48,10 @@ const SEASON = {
   // archive if that's ever turned on here.
   year: 2026,
 
-  currentWeek: 15,
-  statusLine: "WEEK 15 (CHAMPIONSHIPS)",
-  nextAdvanceAt: "2026-09-18T20:00:00-04:00",
-  nextAdvance: "Friday, September 18th — 8:00 PM EDT",
+  currentWeek: 16,
+  statusLine: "BOWL WEEK 1 (CFP FIRST ROUND)",
+  nextAdvanceAt: "2026-09-21T23:00:00-04:00",
+  nextAdvance: "Monday, September 21st — 11:00 PM EDT",
 };
 
 /* ------------------------------------------------------------

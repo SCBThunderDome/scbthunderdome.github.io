@@ -217,7 +217,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Louisville", location: "vs", teamScore: 22, opponentScore: 21 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "South Carolina", location: "at", neutral: true, title: "SEC Championship", round: "ccg", teamScore: 14, opponentScore: 42, sim: true },
-      { week: 16, opponent: "UNLV", location: "vs", round: "cfp-r1" },
+      { week: 16, opponent: "UNLV", location: "vs", round: "cfp-r1", teamScore: 34, opponentScore: 36 },
     ],
   },
   {

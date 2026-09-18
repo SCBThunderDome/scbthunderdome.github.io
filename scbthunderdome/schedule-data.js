@@ -169,7 +169,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Virginia Tech", location: "at", teamScore: 14, opponentScore: 31 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, note: "BYE" },
-      { week: 16, opponent: "Fresno State", location: "vs", neutral: true, title: "Holiday Bowl", round: "bowl-w1" },
+      { week: 16, opponent: "Fresno State", location: "vs", neutral: true, title: "Holiday Bowl", round: "bowl-w1", teamScore: 13, opponentScore: 21 },
     ],
   },
   {

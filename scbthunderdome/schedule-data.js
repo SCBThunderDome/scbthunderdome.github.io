@@ -240,7 +240,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Oklahoma", location: "vs", teamScore: 36, opponentScore: 38 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, note: "BYE" },
-      { week: 16, opponent: "Pittsburgh", location: "vs", neutral: true, title: "Birmingham Bowl", round: "bowl-w1" },
+      { week: 16, opponent: "Pittsburgh", location: "vs", neutral: true, title: "Birmingham Bowl", round: "bowl-w1", teamScore: 39, opponentScore: 38 },
     ],
   },
   {
@@ -287,7 +287,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Arizona", location: "at", teamScore: 14, opponentScore: 13 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, note: "BYE" },
-      { week: 16, opponent: "Michigan", location: "vs", neutral: true, title: "Rate Bowl", round: "bowl-w1" },
+      { week: 16, opponent: "Michigan", location: "vs", neutral: true, title: "Rate Bowl", round: "bowl-w1", teamScore: 18, opponentScore: 30 },
     ],
   },
   {
@@ -332,7 +332,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Baylor", location: "vs", teamScore: 38, opponentScore: 13 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Oklahoma State", location: "at", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 10, opponentScore: 27 },
-      { week: 16, opponent: "BYU", location: "vs", round: "cfp-r1" },
+      { week: 16, opponent: "BYU", location: "vs", round: "cfp-r1", teamScore: 52, opponentScore: 10 },
     ],
   },
   {

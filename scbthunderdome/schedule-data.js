@@ -122,7 +122,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Kentucky", location: "at", teamScore: 21, opponentScore: 22 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "SMU", location: "at", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 27, opponentScore: 35 },
-      { week: 16, opponent: "Baylor", location: "vs", neutral: true, title: "Pop-Tarts Bowl", round: "bowl-w1" },
+      { week: 16, opponent: "Baylor", location: "vs", neutral: true, title: "Pop-Tarts Bowl", round: "bowl-w1", teamScore: 54, opponentScore: 24 },
     ],
   },
   {

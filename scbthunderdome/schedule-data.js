@@ -145,6 +145,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Stanford", location: "at", teamScore: 49, opponentScore: 17 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Louisville", location: "vs", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 35, opponentScore: 27 },
+      { week: 17, opponent: "Houston", location: "vs", neutral: true, title: "Peach Bowl", round: "cfp-qf" },
     ],
   },
   {
@@ -263,6 +264,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Clemson", location: "at", teamScore: 34, opponentScore: 7 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Kentucky", location: "vs", neutral: true, title: "SEC Championship", round: "ccg", teamScore: 42, opponentScore: 14, sim: true },
+      { week: 17, opponent: "Ole Miss", location: "vs", neutral: true, title: "Fiesta Bowl", round: "cfp-qf" },
     ],
   },
 
@@ -333,6 +335,7 @@ const TEAM_SCHEDULES = [
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Oklahoma State", location: "at", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 10, opponentScore: 27 },
       { week: 16, opponent: "BYU", location: "vs", round: "cfp-r1", teamScore: 52, opponentScore: 10 },
+      { week: 17, opponent: "SMU", location: "at", neutral: true, title: "Peach Bowl", round: "cfp-qf" },
     ],
   },
   {
@@ -355,6 +358,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Kansas", location: "vs", teamScore: 30, opponentScore: 7 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Houston", location: "vs", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 27, opponentScore: 10 },
+      { week: 17, opponent: "UNLV", location: "vs", neutral: true, title: "Cotton Bowl", round: "cfp-qf" },
     ],
   },
 
@@ -409,6 +413,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "USC", location: "vs", teamScore: 29, opponentScore: 27 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Wisconsin", location: "at", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 56, opponentScore: 28 },
+      { week: 17, opponent: "Ohio State", location: "vs", neutral: true, title: "Rose Bowl", round: "cfp-qf" },
     ],
   },
 
@@ -434,7 +439,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "USF", location: "at", teamScore: 20, opponentScore: 14 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Tulsa", location: "vs", neutral: true, title: "American Championship", round: "ccg", teamScore: 14, opponentScore: 20 },
-      { week: 16, opponent: "Hawai'i", location: "vs", neutral: true, title: "Hawaii Bowl", round: "bowl-w1" },
+      { week: 16, opponent: "Hawai'i", location: "vs", neutral: true, title: "Hawaii Bowl", round: "bowl-w1", teamScore: 34, opponentScore: 42 },
     ],
   },
 ];

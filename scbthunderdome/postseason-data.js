@@ -44,5 +44,9 @@
 
 const POSTSEASON = {
   rounds: [
+    { id: "cfp-r1", label: "CFP First Round", games: [
+      { home: "Ohio State", away: "Oklahoma", neutral: true, homeScore: 27, awayScore: 19 },
+      { home: "Ole Miss", away: "Duke", neutral: true, homeScore: 44, awayScore: 7 },
+    ]},
   ],
 };

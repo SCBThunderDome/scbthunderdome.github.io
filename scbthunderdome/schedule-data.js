@@ -264,7 +264,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Clemson", location: "at", teamScore: 34, opponentScore: 7 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Kentucky", location: "vs", neutral: true, title: "SEC Championship", round: "ccg", teamScore: 42, opponentScore: 14, sim: true },
-      { week: 17, opponent: "Ole Miss", location: "vs", neutral: true, title: "Fiesta Bowl", round: "cfp-qf" },
+      { week: 17, opponent: "Ole Miss", location: "vs", neutral: true, title: "Fiesta Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 10 },
     ],
   },
 

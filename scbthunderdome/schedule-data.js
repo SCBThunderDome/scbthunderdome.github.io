@@ -145,7 +145,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Stanford", location: "at", teamScore: 49, opponentScore: 17 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Louisville", location: "vs", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 35, opponentScore: 27 },
-      { week: 17, opponent: "Houston", location: "vs", neutral: true, title: "Peach Bowl", round: "cfp-qf" },
+      { week: 17, opponent: "Houston", location: "vs", neutral: true, title: "Peach Bowl", round: "cfp-qf", teamScore: 69, opponentScore: 35 },
     ],
   },
   {
@@ -335,7 +335,7 @@ const TEAM_SCHEDULES = [
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Oklahoma State", location: "at", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 10, opponentScore: 27 },
       { week: 16, opponent: "BYU", location: "vs", round: "cfp-r1", teamScore: 52, opponentScore: 10 },
-      { week: 17, opponent: "SMU", location: "at", neutral: true, title: "Peach Bowl", round: "cfp-qf" },
+      { week: 17, opponent: "SMU", location: "at", neutral: true, title: "Peach Bowl", round: "cfp-qf", teamScore: 35, opponentScore: 69 },
     ],
   },
   {
@@ -386,7 +386,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Minnesota", location: "vs", teamScore: 24, opponentScore: 16 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "UCLA", location: "vs", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 28, opponentScore: 56 },
-      { week: 17, opponent: "UConn", location: "vs", neutral: true, title: "Citrus Bowl", round: "bowl-w2" },
+      { week: 17, opponent: "UConn", location: "vs", neutral: true, title: "Citrus Bowl", round: "bowl-w2", teamScore: 30, opponentScore: 0 },
     ],
   },
   {
@@ -413,7 +413,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "USC", location: "vs", teamScore: 29, opponentScore: 27 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Wisconsin", location: "at", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 56, opponentScore: 28 },
-      { week: 17, opponent: "Ohio State", location: "vs", neutral: true, title: "Rose Bowl", round: "cfp-qf" },
+      { week: 17, opponent: "Ohio State", location: "vs", neutral: true, title: "Rose Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 24 },
     ],
   },
 

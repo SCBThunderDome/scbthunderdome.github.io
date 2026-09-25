@@ -193,7 +193,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Virginia", location: "vs", teamScore: 31, opponentScore: 14 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, note: "BYE" },
-      { week: 17, opponent: "Indiana", location: "vs", neutral: true, title: "Duke's Mayo Bowl", round: "bowl-w2" },
+      { week: 17, opponent: "Indiana", location: "vs", neutral: true, title: "Duke's Mayo Bowl", round: "bowl-w2", teamScore: 7, opponentScore: 20 },
     ],
   },
 
@@ -358,7 +358,7 @@ const TEAM_SCHEDULES = [
       { week: 13, opponent: "Kansas", location: "vs", teamScore: 30, opponentScore: 7 },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Houston", location: "vs", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 27, opponentScore: 10 },
-      { week: 17, opponent: "UNLV", location: "vs", neutral: true, title: "Cotton Bowl", round: "cfp-qf" },
+      { week: 17, opponent: "UNLV", location: "vs", neutral: true, title: "Cotton Bowl", round: "cfp-qf", teamScore: 56, opponentScore: 0 },
     ],
   },
 

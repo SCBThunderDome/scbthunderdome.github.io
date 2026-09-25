@@ -48,10 +48,10 @@ const SEASON = {
   // archive if that's ever turned on here.
   year: 2026,
 
-  currentWeek: 17,
-  statusLine: "BOWL WEEK 2 (CFP QUARTERFINALS)",
-  nextAdvanceAt: "2026-09-24T23:00:00-04:00",
-  nextAdvance: "Thursday, September 24th — 11:00 PM EDT",
+  currentWeek: 18,
+  statusLine: "BOWL WEEK 3 (CFP SEMIFINALS)",
+  nextAdvanceAt: "2026-09-28T23:00:00-04:00",
+  nextAdvance: "Monday, September 28th — 11:00 PM EDT",
 };
 
 /* ------------------------------------------------------------

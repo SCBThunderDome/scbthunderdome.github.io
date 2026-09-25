@@ -146,6 +146,7 @@ const TEAM_SCHEDULES = [
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Louisville", location: "vs", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 35, opponentScore: 27 },
       { week: 17, opponent: "Houston", location: "vs", neutral: true, title: "Peach Bowl", round: "cfp-qf", teamScore: 69, opponentScore: 35 },
+      { week: 18, opponent: "Oklahoma State", location: "vs", neutral: true, title: "Orange Bowl", round: "cfp-sf" },
     ],
   },
   {
@@ -265,6 +266,7 @@ const TEAM_SCHEDULES = [
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Kentucky", location: "vs", neutral: true, title: "SEC Championship", round: "ccg", teamScore: 42, opponentScore: 14, sim: true },
       { week: 17, opponent: "Ole Miss", location: "vs", neutral: true, title: "Fiesta Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 10 },
+      { week: 18, opponent: "UCLA", location: "vs", neutral: true, title: "Sugar Bowl", round: "cfp-sf" },
     ],
   },
 
@@ -359,6 +361,7 @@ const TEAM_SCHEDULES = [
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Houston", location: "vs", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 27, opponentScore: 10 },
       { week: 17, opponent: "UNLV", location: "vs", neutral: true, title: "Cotton Bowl", round: "cfp-qf", teamScore: 56, opponentScore: 0 },
+      { week: 18, opponent: "SMU", location: "at", neutral: true, title: "Orange Bowl", round: "cfp-sf" },
     ],
   },
 
@@ -414,6 +417,7 @@ const TEAM_SCHEDULES = [
       { week: 14, note: "Army-Navy Week" },
       { week: 15, opponent: "Wisconsin", location: "at", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 56, opponentScore: 28 },
       { week: 17, opponent: "Ohio State", location: "vs", neutral: true, title: "Rose Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 24 },
+      { week: 18, opponent: "South Carolina", location: "at", neutral: true, title: "Sugar Bowl", round: "cfp-sf" },
     ],
   },
 

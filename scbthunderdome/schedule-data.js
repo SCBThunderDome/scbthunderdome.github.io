@@ -147,7 +147,7 @@ const TEAM_SCHEDULES = [
       { week: 15, opponent: "Louisville", location: "vs", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 35, opponentScore: 27 },
       { week: 17, opponent: "Houston", location: "vs", neutral: true, title: "Peach Bowl", round: "cfp-qf", teamScore: 69, opponentScore: 35 },
       { week: 18, opponent: "Oklahoma State", location: "vs", neutral: true, title: "Orange Bowl", round: "cfp-sf", teamScore: 49, opponentScore: 28 },
-      { week: 19, opponent: "UCLA", location: "vs", neutral: true, title: "National Championship", round: "cfp-nc" },
+      { week: 19, opponent: "UCLA", location: "vs", neutral: true, title: "National Championship", round: "cfp-nc", teamScore: 21, opponentScore: 44 },
     ],
   },
   {
@@ -419,7 +419,7 @@ const TEAM_SCHEDULES = [
       { week: 15, opponent: "Wisconsin", location: "at", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 56, opponentScore: 28 },
       { week: 17, opponent: "Ohio State", location: "vs", neutral: true, title: "Rose Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 24 },
       { week: 18, opponent: "South Carolina", location: "at", neutral: true, title: "Sugar Bowl", round: "cfp-sf", teamScore: 35, opponentScore: 24 },
-      { week: 19, opponent: "SMU", location: "at", neutral: true, title: "National Championship", round: "cfp-nc" },
+      { week: 19, opponent: "SMU", location: "at", neutral: true, title: "National Championship", round: "cfp-nc", teamScore: 44, opponentScore: 21 },
     ],
   },
 

@@ -48,10 +48,10 @@ const SEASON = {
   // archive if that's ever turned on here.
   year: 2026,
 
-  currentWeek: 19,
-  statusLine: "BOWL WEEK 4 (NATIONAL CHAMPIONSHIP)",
-  nextAdvanceAt: "2026-09-28T23:00:00-04:00",
-  nextAdvance: "Monday, September 28th — 11:00 PM EDT",
+  currentWeek: "OFFSEASON",
+  statusLine: "OFFSEASON",
+  nextAdvanceAt: "",
+  nextAdvance: "",
 };
 
 /* ------------------------------------------------------------

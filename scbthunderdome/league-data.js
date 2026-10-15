@@ -48,8 +48,8 @@ const SEASON = {
   // archive if that's ever turned on here.
   year: 2027,
 
-  currentWeek: "PRESEASON",
-  statusLine: "PRESEASON",
+  currentWeek: 0,
+  statusLine: "WEEK 0",
   nextAdvanceAt: "",
   nextAdvance: "",
 };

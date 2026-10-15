@@ -1,0 +1,451 @@
+/* ============================================================
+   SCB THUNDERDOME — SCHEDULE DATA
+   ------------------------------------------------------------
+   Transcribed from in-game "Team Schedule" screenshots, 2 per
+   team (weeks 0-8 and weeks 8-Conf Champ), overlap at week 8
+   deduped by hand. Snapshot taken 2026-07-30.
+
+   All 14 coaches are represented. Every user-vs-user matchup was
+   cross-checked against BOTH coaches' screenshots and the
+   home/away sides agree in all 13 cases — see the H2H list at the
+   bottom of this comment.
+
+   UCLA (RekenCrew) joined 2026-08-06, mid-Week 2, and is the one
+   entry not from the 2026-07-30 snapshot. Its Week 7 game against
+   Wisconsin agrees with Wisconsin's existing screenshot.
+
+   WEEK MAPPING. The in-game table lists rows 0-15 and then a
+   separate "Conf Champ" row. This file follows the convention the
+   NCAA Legends leagues use and that script.js's weekLabel()
+   expects:
+       weeks 0-13     regular season games
+       week 14        Army-Navy Week
+       week 15        conference championship  <- the "Conf Champ" row
+   The in-game row 15 is a bye for every team and is NOT carried
+   over; nothing renders it, and carrying it would leave the
+   championship with nowhere to live. Confirmed with Josh
+   2026-07-30.
+
+   STADIUMS. The Team Schedule screen doesn't display venue, so
+   stadium is intentionally omitted. script.js treats it as
+   optional (renders an empty span), so the site is happy without
+   it. Can be filled in per entry later if it's wanted.
+
+   THE POSTSEASON LIVES HERE TOO — weeks 15-19.
+
+   A conference championship, a bowl or a CFP round that a COACHED
+   team played is an ordinary row on that team's schedule, with three
+   optional extra fields:
+
+     neutral: true      no true home team. home/away still decide
+                        which score is which; the row renders "VS" at
+                        the named stadium rather than claiming "AT".
+     title: "Rose Bowl" the game's own name. Replaces the week number
+                        in the schedule row and the card footer.
+     round: "cfp-qf"    the machine-readable round id. One of:
+                        ccg, bowl-w1, bowl-w2,
+                        cfp-r1, cfp-qf, cfp-sf, cfp-nc
+
+   `round` IS LOAD-BEARING AND `title` IS NOT. Conference titles, CFP
+   appearances and national championships on the roster cards are
+   derived by matching `round`; a bowl game with a title and no round
+   renders correctly and earns nothing. The round is never inferred
+   from the title, because a sponsor renaming a bowl would silently
+   stop counting it.
+
+     { week: 17, opponent: "Miami", location: "vs", neutral: true,
+       stadium: "AT&T Stadium", title: "Cotton Bowl", round: "cfp-qf",
+       teamScore: 31, opponentScore: 24 }
+
+   Weeks 16-19 are the game's Bowl Weeks 1-4. A team only has a row
+   for a week it actually played, so most teams stop at 15 and a
+   team with a first-round bye has no week 16 row at all.
+
+   A game between two teams NOBODY coaches — most of the CFP bracket
+   — does not belong here. It has no coach's schedule to live on and
+   goes in postseason-data.js instead.
+
+   SCORES. Only one game has been played: Virginia beat NC State
+   33-14 in Week 0, against a CPU opponent, so there is no second
+   entry to keep in sync. Every other week 0 row is a bye. Once a
+   user-vs-user game goes final, add the score to BOTH teams'
+   entries or it'll only show on one coach's schedule.
+
+   NAME NOTE: "Arizona State" is spelled out rather than the sheet's
+   "ASU" — the game spells it in full, and the abbreviation collides
+   with Appalachian State. Likewise "Miami" here is the ACC
+   Hurricanes, as the game spells it.
+
+   CONFERENCES match league-data.js (ACC / SEC / XII / B1G / AAC)
+   and are stock real-world alignment — this league does not use
+   the custom realignment the NCAA Legends leagues do.
+
+   TULANE HAS NO USER-VS-USER GAMES AT ALL — a full 12-game CPU
+   slate. That is what the screenshots show, not a transcription
+   gap. Wisconsin was in the same boat until UCLA joined and gave
+   it the Week 7 game.
+
+   THE 13 HEAD-TO-HEAD GAMES, for cross-checking:
+     W3   SMU        at Louisville
+     W5   Kentucky   at South Carolina
+     W7   Virginia   at SMU
+     W7   Okla State at Houston
+     W7   Wisconsin  at UCLA
+     W8   Colorado   at Oklahoma State
+     W10  Va Tech    at SMU
+     W10  Colorado   at Arizona State
+     W11  Houston    at Colorado
+     W12  Kentucky   at Missouri
+     W12  Okla State at Arizona State
+     W13  Louisville at Kentucky
+     W13  Virginia   at Virginia Tech
+   ============================================================ */
+const TEAM_SCHEDULES = [
+  /* ---------------------------- ACC ---------------------------- */
+  {
+    team: "Louisville",
+    conference: "ACC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Ole Miss", location: "vs", teamScore: 24, opponentScore: 55 },
+      { week: 2, opponent: "FCS Southeast", location: "vs", teamScore: 52, opponentScore: 0 },
+      { week: 3, opponent: "SMU", location: "vs", teamScore: 21, opponentScore: 49 },
+      { week: 4, opponent: "Wake Forest", location: "vs", teamScore: 31, opponentScore: 7 },
+      { week: 5, opponent: "NC State", location: "at", teamScore: 38, opponentScore: 28 },
+      { week: 6, opponent: "Florida State", location: "vs", teamScore: 21, opponentScore: 17 },
+      { week: 7, opponent: "Syracuse", location: "at", teamScore: 22, opponentScore: 17 },
+      { week: 8, note: "BYE" },
+      { week: 9, opponent: "Stanford", location: "vs", teamScore: 72, opponentScore: 28 },
+      { week: 10, opponent: "Georgia Tech", location: "at", teamScore: 24, opponentScore: 17 },
+      { week: 11, opponent: "North Carolina", location: "at", teamScore: 34, opponentScore: 21 },
+      { week: 12, opponent: "Pittsburgh", location: "vs", teamScore: 21, opponentScore: 13 },
+      { week: 13, opponent: "Kentucky", location: "at", teamScore: 21, opponentScore: 22 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "SMU", location: "at", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 27, opponentScore: 35 },
+      { week: 16, opponent: "Baylor", location: "vs", neutral: true, title: "Pop-Tarts Bowl", round: "bowl-w1", teamScore: 54, opponentScore: 24 },
+    ],
+  },
+  {
+    team: "SMU",
+    conference: "ACC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Florida State", location: "at", teamScore: 56, opponentScore: 7 },
+      { week: 2, opponent: "FCS Midwest", location: "vs", teamScore: 45, opponentScore: 23 },
+      { week: 3, opponent: "Louisville", location: "at", teamScore: 49, opponentScore: 21 },
+      { week: 4, opponent: "Missouri State", location: "vs", teamScore: 73, opponentScore: 20 },
+      { week: 5, opponent: "Boston College", location: "vs", teamScore: 59, opponentScore: 14 },
+      { week: 6, note: "BYE" },
+      { week: 7, opponent: "Virginia", location: "vs", teamScore: 56, opponentScore: 13 },
+      { week: 8, opponent: "California", location: "vs", teamScore: 45, opponentScore: 33 },
+      { week: 9, opponent: "Syracuse", location: "at", teamScore: 35, opponentScore: 6 },
+      { week: 10, opponent: "Virginia Tech", location: "vs", teamScore: 42, opponentScore: 16 },
+      { week: 11, opponent: "Wake Forest", location: "vs", teamScore: 63, opponentScore: 10 },
+      { week: 12, opponent: "Notre Dame", location: "at", teamScore: 48, opponentScore: 29 },
+      { week: 13, opponent: "Stanford", location: "at", teamScore: 49, opponentScore: 17 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "Louisville", location: "vs", neutral: true, title: "ACC Championship", round: "ccg", teamScore: 35, opponentScore: 27 },
+      { week: 17, opponent: "Houston", location: "vs", neutral: true, title: "Peach Bowl", round: "cfp-qf", teamScore: 69, opponentScore: 35 },
+      { week: 18, opponent: "Oklahoma State", location: "vs", neutral: true, title: "Orange Bowl", round: "cfp-sf", teamScore: 49, opponentScore: 28 },
+      { week: 19, opponent: "UCLA", location: "vs", neutral: true, title: "National Championship", round: "cfp-nc", teamScore: 21, opponentScore: 44 },
+    ],
+  },
+  {
+    team: "Virginia",
+    conference: "ACC",
+    weeks: [
+      /* The only game played so far. CPU opponent, so no paired
+         entry to keep in sync. */
+      { week: 0, opponent: "NC State", location: "vs", teamScore: 33, opponentScore: 14 },
+      { week: 1, note: "BYE" },
+      { week: 2, opponent: "FCS East", location: "vs", teamScore: 15, opponentScore: 6 },
+      { week: 3, opponent: "West Virginia", location: "vs", teamScore: 23, opponentScore: 20 },
+      { week: 4, opponent: "Delaware", location: "vs", teamScore: 17, opponentScore: 24 },
+      { week: 5, opponent: "Florida State", location: "at", teamScore: 17, opponentScore: 24 },
+      { week: 6, opponent: "Syracuse", location: "vs", teamScore: 17, opponentScore: 10 },
+      { week: 7, opponent: "SMU", location: "at", teamScore: 13, opponentScore: 56 },
+      { week: 8, opponent: "Duke", location: "vs", teamScore: 20, opponentScore: 17 },
+      { week: 9, opponent: "Wake Forest", location: "at", teamScore: 17, opponentScore: 15 },
+      { week: 10, note: "BYE" },
+      { week: 11, opponent: "California", location: "vs", teamScore: 17, opponentScore: 14 },
+      { week: 12, opponent: "North Carolina", location: "vs", teamScore: 38, opponentScore: 40 },
+      { week: 13, opponent: "Virginia Tech", location: "at", teamScore: 14, opponentScore: 31 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, note: "BYE" },
+      { week: 16, opponent: "Fresno State", location: "vs", neutral: true, title: "Holiday Bowl", round: "bowl-w1", teamScore: 13, opponentScore: 21 },
+    ],
+  },
+  {
+    team: "Virginia Tech",
+    conference: "ACC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "FCS East", location: "vs", teamScore: 31, opponentScore: 10 },
+      { week: 2, opponent: "Old Dominion", location: "vs", teamScore: 27, opponentScore: 31 },
+      { week: 3, opponent: "Maryland", location: "at", teamScore: 14, opponentScore: 34 },
+      { week: 4, opponent: "Boston College", location: "at", teamScore: 40, opponentScore: 28 },
+      { week: 5, opponent: "Pittsburgh", location: "vs", teamScore: 3, opponentScore: 16 },
+      { week: 6, opponent: "California", location: "at", teamScore: 35, opponentScore: 38 },
+      { week: 7, opponent: "Georgia Tech", location: "vs", teamScore: 41, opponentScore: 27 },
+      { week: 8, opponent: "Clemson", location: "at", teamScore: 17, opponentScore: 35 },
+      { week: 9, note: "BYE" },
+      { week: 10, opponent: "SMU", location: "at", teamScore: 16, opponentScore: 42 },
+      { week: 11, opponent: "Stanford", location: "vs", teamScore: 34, opponentScore: 31 },
+      { week: 12, opponent: "Miami", location: "at", teamScore: 28, opponentScore: 0 },
+      { week: 13, opponent: "Virginia", location: "vs", teamScore: 31, opponentScore: 14 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, note: "BYE" },
+      { week: 17, opponent: "Indiana", location: "vs", neutral: true, title: "Duke's Mayo Bowl", round: "bowl-w2", teamScore: 7, opponentScore: 20 },
+    ],
+  },
+
+  /* ---------------------------- SEC ---------------------------- */
+  {
+    team: "Kentucky",
+    conference: "SEC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "FCS Southeast", location: "vs", teamScore: 52, opponentScore: 21 },
+      { week: 2, opponent: "Alabama", location: "vs", teamScore: 27, opponentScore: 10 },
+      { week: 3, opponent: "Texas A&M", location: "at", teamScore: 35, opponentScore: 10 },
+      { week: 4, opponent: "South Alabama", location: "vs", teamScore: 38, opponentScore: 7 },
+      { week: 5, opponent: "South Carolina", location: "at", teamScore: 12, opponentScore: 27 },
+      { week: 6, opponent: "LSU", location: "vs", teamScore: 30, opponentScore: 7 },
+      { week: 7, opponent: "Oklahoma", location: "at", teamScore: 21, opponentScore: 17 },
+      { week: 8, opponent: "Vanderbilt", location: "vs", teamScore: 45, opponentScore: 10 },
+      { week: 9, note: "BYE" },
+      { week: 10, opponent: "Tennessee", location: "at", teamScore: 34, opponentScore: 6 },
+      { week: 11, opponent: "Florida", location: "vs", teamScore: 31, opponentScore: 24 },
+      { week: 12, opponent: "Missouri", location: "at", teamScore: 31, opponentScore: 21 },
+      { week: 13, opponent: "Louisville", location: "vs", teamScore: 22, opponentScore: 21 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "South Carolina", location: "at", neutral: true, title: "SEC Championship", round: "ccg", teamScore: 14, opponentScore: 42, sim: true },
+      { week: 16, opponent: "UNLV", location: "vs", round: "cfp-r1", teamScore: 34, opponentScore: 36 },
+    ],
+  },
+  {
+    team: "Missouri",
+    conference: "SEC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "FCS Midwest", location: "vs", teamScore: 63, opponentScore: 7 },
+      { week: 2, opponent: "Kansas", location: "at", teamScore: 51, opponentScore: 21 },
+      { week: 3, opponent: "Troy", location: "vs", teamScore: 49, opponentScore: 0 },
+      { week: 4, opponent: "Mississippi State", location: "at", teamScore: 41, opponentScore: 24 },
+      { week: 5, opponent: "Florida", location: "vs", teamScore: 44, opponentScore: 20 },
+      { week: 6, opponent: "Texas A&M", location: "vs", teamScore: 21, opponentScore: 28 },
+      { week: 7, opponent: "Ole Miss", location: "at", teamScore: 17, opponentScore: 40 },
+      { week: 8, note: "BYE" },
+      { week: 9, opponent: "Arkansas", location: "at", teamScore: 49, opponentScore: 24 },
+      { week: 10, opponent: "Texas", location: "vs", teamScore: 18, opponentScore: 24 },
+      { week: 11, opponent: "Georgia", location: "at", teamScore: 41, opponentScore: 38 },
+      { week: 12, opponent: "Kentucky", location: "vs", teamScore: 21, opponentScore: 31 },
+      { week: 13, opponent: "Oklahoma", location: "vs", teamScore: 36, opponentScore: 38 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, note: "BYE" },
+      { week: 16, opponent: "Pittsburgh", location: "vs", neutral: true, title: "Birmingham Bowl", round: "bowl-w1", teamScore: 39, opponentScore: 38 },
+    ],
+  },
+  {
+    team: "South Carolina",
+    conference: "SEC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Kent State", location: "vs", teamScore: 49, opponentScore: 6 },
+      { week: 2, opponent: "FCS Southeast", location: "vs", teamScore: 75, opponentScore: 10 },
+      { week: 3, opponent: "Mississippi State", location: "vs", teamScore: 34, opponentScore: 18 },
+      { week: 4, opponent: "Alabama", location: "at", teamScore: 25, opponentScore: 29 },
+      { week: 5, opponent: "Kentucky", location: "vs", teamScore: 27, opponentScore: 12 },
+      { week: 6, opponent: "Florida", location: "at", teamScore: 45, opponentScore: 14 },
+      { week: 7, note: "BYE" },
+      { week: 8, opponent: "Tennessee", location: "vs", teamScore: 45, opponentScore: 38 },
+      { week: 9, opponent: "Oklahoma", location: "at", teamScore: 38, opponentScore: 31 },
+      { week: 10, opponent: "Texas A&M", location: "vs", teamScore: 36, opponentScore: 14 },
+      { week: 11, opponent: "Arkansas", location: "at", teamScore: 35, opponentScore: 14 },
+      { week: 12, opponent: "Georgia", location: "vs", teamScore: 38, opponentScore: 22 },
+      { week: 13, opponent: "Clemson", location: "at", teamScore: 34, opponentScore: 7 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "Kentucky", location: "vs", neutral: true, title: "SEC Championship", round: "ccg", teamScore: 42, opponentScore: 14, sim: true },
+      { week: 17, opponent: "Ole Miss", location: "vs", neutral: true, title: "Fiesta Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 10 },
+      { week: 18, opponent: "UCLA", location: "vs", neutral: true, title: "Sugar Bowl", round: "cfp-sf", teamScore: 24, opponentScore: 35 },
+    ],
+  },
+
+  /* ---------------------------- XII ---------------------------- */
+  {
+    team: "Arizona State",
+    conference: "XII",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "FCS Midwest", location: "vs", teamScore: 41, opponentScore: 13 },
+      { week: 2, opponent: "Texas A&M", location: "at", teamScore: 14, opponentScore: 30 },
+      { week: 3, opponent: "Kansas", location: "at", teamScore: 24, opponentScore: 26 },
+      { week: 4, note: "BYE" },
+      { week: 5, opponent: "Baylor", location: "vs", teamScore: 21, opponentScore: 26 },
+      { week: 6, opponent: "Hawai'i", location: "vs", teamScore: 28, opponentScore: 7 },
+      { week: 7, opponent: "Texas Tech", location: "at", teamScore: 9, opponentScore: 27 },
+      { week: 8, opponent: "Kansas State", location: "vs", teamScore: 28, opponentScore: 7 },
+      { week: 9, opponent: "BYU", location: "at", teamScore: 34, opponentScore: 19 },
+      { week: 10, opponent: "Colorado", location: "vs", teamScore: 21, opponentScore: 31 },
+      { week: 11, opponent: "UCF", location: "at", teamScore: 24, opponentScore: 17 },
+      { week: 12, opponent: "Oklahoma State", location: "vs", teamScore: 14, opponentScore: 48 },
+      { week: 13, opponent: "Arizona", location: "at", teamScore: 14, opponentScore: 13 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, note: "BYE" },
+      { week: 16, opponent: "Michigan", location: "vs", neutral: true, title: "Rate Bowl", round: "bowl-w1", teamScore: 18, opponentScore: 30 },
+    ],
+  },
+  {
+    team: "Colorado",
+    conference: "XII",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Georgia Tech", location: "at", teamScore: 10, opponentScore: 17 },
+      { week: 2, opponent: "FCS Midwest", location: "vs", teamScore: 24, opponentScore: 17 },
+      { week: 3, opponent: "Northwestern", location: "at", teamScore: 13, opponentScore: 25 },
+      { week: 4, opponent: "Baylor", location: "at", teamScore: 14, opponentScore: 52 },
+      { week: 5, opponent: "Texas Tech", location: "vs", teamScore: 21, opponentScore: 41 },
+      { week: 6, note: "BYE" },
+      { week: 7, opponent: "Utah", location: "vs", teamScore: 24, opponentScore: 21 },
+      { week: 8, opponent: "Oklahoma State", location: "at", teamScore: 27, opponentScore: 33 },
+      { week: 9, opponent: "Kansas State", location: "vs", teamScore: 33, opponentScore: 35 },
+      { week: 10, opponent: "Arizona State", location: "at", teamScore: 31, opponentScore: 21 },
+      { week: 11, opponent: "Houston", location: "vs", teamScore: 21, opponentScore: 31 },
+      { week: 12, opponent: "Cincinnati", location: "at", teamScore: 48, opponentScore: 17 },
+      { week: 13, opponent: "UCF", location: "vs", teamScore: 28, opponentScore: 35 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, note: "BYE" },
+    ],
+  },
+  {
+    team: "Houston",
+    conference: "XII",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Oregon State", location: "vs", teamScore: 36, opponentScore: 0 },
+      { week: 2, opponent: "FCS Midwest", location: "vs", teamScore: 44, opponentScore: 0 },
+      { week: 3, opponent: "Texas Tech", location: "at", teamScore: 34, opponentScore: 28 },
+      { week: 4, opponent: "Georgia Southern", location: "at", teamScore: 17, opponentScore: 3 },
+      { week: 5, opponent: "UCF", location: "vs", teamScore: 31, opponentScore: 13 },
+      { week: 6, opponent: "Kansas State", location: "at", teamScore: 27, opponentScore: 7 },
+      { week: 7, opponent: "Oklahoma State", location: "vs", teamScore: 0, opponentScore: 27 },
+      { week: 8, opponent: "Utah", location: "at", teamScore: 24, opponentScore: 10 },
+      { week: 9, note: "BYE" },
+      { week: 10, opponent: "Cincinnati", location: "vs", teamScore: 40, opponentScore: 0 },
+      { week: 11, opponent: "Colorado", location: "at", teamScore: 31, opponentScore: 21 },
+      { week: 12, opponent: "West Virginia", location: "at", teamScore: 28, opponentScore: 10 },
+      { week: 13, opponent: "Baylor", location: "vs", teamScore: 38, opponentScore: 13 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "Oklahoma State", location: "at", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 10, opponentScore: 27 },
+      { week: 16, opponent: "BYU", location: "vs", round: "cfp-r1", teamScore: 52, opponentScore: 10 },
+      { week: 17, opponent: "SMU", location: "at", neutral: true, title: "Peach Bowl", round: "cfp-qf", teamScore: 35, opponentScore: 69 },
+    ],
+  },
+  {
+    team: "Oklahoma State",
+    conference: "XII",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Tulsa", location: "at", teamScore: 44, opponentScore: 0 },
+      { week: 2, opponent: "Oregon", location: "vs", teamScore: 27, opponentScore: 17 },
+      { week: 3, opponent: "FCS Midwest", location: "vs", teamScore: 59, opponentScore: 0 },
+      { week: 4, opponent: "West Virginia", location: "at", teamScore: 31, opponentScore: 7 },
+      { week: 5, note: "BYE" },
+      { week: 6, opponent: "UCF", location: "vs", teamScore: 23, opponentScore: 7 },
+      { week: 7, opponent: "Houston", location: "at", teamScore: 27, opponentScore: 0 },
+      { week: 8, opponent: "Colorado", location: "vs", teamScore: 33, opponentScore: 27 },
+      { week: 9, opponent: "Iowa State", location: "at", teamScore: 28, opponentScore: 0 },
+      { week: 10, opponent: "Kansas State", location: "at", teamScore: 34, opponentScore: 0 },
+      { week: 11, opponent: "Texas Tech", location: "vs", teamScore: 30, opponentScore: 28 },
+      { week: 12, opponent: "Arizona State", location: "at", teamScore: 48, opponentScore: 14 },
+      { week: 13, opponent: "Kansas", location: "vs", teamScore: 30, opponentScore: 7 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "Houston", location: "vs", neutral: true, title: "Big 12 Championship", round: "ccg", teamScore: 27, opponentScore: 10 },
+      { week: 17, opponent: "UNLV", location: "vs", neutral: true, title: "Cotton Bowl", round: "cfp-qf", teamScore: 56, opponentScore: 0 },
+      { week: 18, opponent: "SMU", location: "at", neutral: true, title: "Orange Bowl", round: "cfp-sf", teamScore: 28, opponentScore: 49 },
+    ],
+  },
+
+  /* ---------------------------- B1G ---------------------------- */
+  {
+    /* Was a full CPU slate at transcription time. UCLA joining on
+       2026-08-06 turned the Week 7 trip into this team's only
+       user-vs-user game. */
+    team: "Wisconsin",
+    conference: "B1G",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Notre Dame", location: "at", teamScore: 21, opponentScore: 51 },
+      { week: 2, opponent: "FCS Midwest", location: "vs", teamScore: 56, opponentScore: 0 },
+      { week: 3, opponent: "Eastern Michigan", location: "vs", teamScore: 62, opponentScore: 0 },
+      { week: 4, opponent: "Penn State", location: "at", teamScore: 44, opponentScore: 45 },
+      { week: 5, opponent: "Michigan State", location: "vs", teamScore: 21, opponentScore: 15 },
+      { week: 6, note: "BYE" },
+      { week: 7, opponent: "UCLA", location: "at", teamScore: 52, opponentScore: 49 },
+      { week: 8, opponent: "USC", location: "vs", teamScore: 31, opponentScore: 21 },
+      { week: 9, opponent: "Iowa", location: "at", teamScore: 44, opponentScore: 41 },
+      { week: 10, opponent: "Rutgers", location: "vs", teamScore: 48, opponentScore: 28 },
+      { week: 11, opponent: "Maryland", location: "at", teamScore: 31, opponentScore: 21 },
+      { week: 12, opponent: "Purdue", location: "at", teamScore: 26, opponentScore: 21 },
+      { week: 13, opponent: "Minnesota", location: "vs", teamScore: 24, opponentScore: 16 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "UCLA", location: "vs", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 28, opponentScore: 56 },
+      { week: 17, opponent: "UConn", location: "vs", neutral: true, title: "Citrus Bowl", round: "bowl-w2", teamScore: 30, opponentScore: 0 },
+    ],
+  },
+  {
+    /* RekenCrew joined the league as UCLA on 2026-08-06, mid-Week 2,
+       with the first two games already played (both wins). Only
+       user-vs-user game is Wisconsin at UCLA in Week 7; that entry is
+       mirrored on the Wisconsin schedule above. */
+    team: "UCLA",
+    conference: "B1G",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "California", location: "at", teamScore: 48, opponentScore: 17 },
+      { week: 2, opponent: "San Diego State", location: "vs", teamScore: 31, opponentScore: 27 },
+      { week: 3, opponent: "Purdue", location: "vs", teamScore: 42, opponentScore: 14 },
+      { week: 4, opponent: "Maryland", location: "at", teamScore: 27, opponentScore: 13 },
+      { week: 5, note: "BYE" },
+      { week: 6, opponent: "Oregon", location: "at", teamScore: 28, opponentScore: 25 },
+      { week: 7, opponent: "Wisconsin", location: "vs", teamScore: 49, opponentScore: 52 },
+      { week: 8, opponent: "Michigan State", location: "vs", teamScore: 48, opponentScore: 24 },
+      { week: 9, opponent: "Nevada", location: "vs", teamScore: 45, opponentScore: 10 },
+      { week: 10, opponent: "Minnesota", location: "at", teamScore: 34, opponentScore: 16 },
+      { week: 11, opponent: "Illinois", location: "vs", teamScore: 41, opponentScore: 24 },
+      { week: 12, opponent: "Michigan", location: "at", teamScore: 28, opponentScore: 14 },
+      { week: 13, opponent: "USC", location: "vs", teamScore: 29, opponentScore: 27 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "Wisconsin", location: "at", neutral: true, title: "Big Ten Championship", round: "ccg", teamScore: 56, opponentScore: 28 },
+      { week: 17, opponent: "Ohio State", location: "vs", neutral: true, title: "Rose Bowl", round: "cfp-qf", teamScore: 28, opponentScore: 24 },
+      { week: 18, opponent: "South Carolina", location: "at", neutral: true, title: "Sugar Bowl", round: "cfp-sf", teamScore: 35, opponentScore: 24 },
+      { week: 19, opponent: "SMU", location: "at", neutral: true, title: "National Championship", round: "cfp-nc", teamScore: 44, opponentScore: 21 },
+    ],
+  },
+
+  /* ---------------------------- AAC ---------------------------- */
+  {
+    /* Also a full CPU slate — see the note on Wisconsin. */
+    team: "Tulane",
+    conference: "AAC",
+    weeks: [
+      { week: 0, note: "BYE" },
+      { week: 1, opponent: "Duke", location: "at", teamScore: 27, opponentScore: 31 },
+      { week: 2, opponent: "South Alabama", location: "vs", teamScore: 20, opponentScore: 7 },
+      { week: 3, opponent: "Kansas State", location: "at", teamScore: 17, opponentScore: 35 },
+      { week: 4, opponent: "Southern Mississippi", location: "vs", teamScore: 24, opponentScore: 27 },
+      { week: 5, note: "BYE" },
+      { week: 6, opponent: "Army", location: "at", teamScore: 27, opponentScore: 20 },
+      { week: 7, opponent: "Memphis", location: "vs", teamScore: 24, opponentScore: 22 },
+      { week: 8, opponent: "UTSA", location: "vs", teamScore: 19, opponentScore: 24 },
+      { week: 9, opponent: "Charlotte", location: "at", teamScore: 13, opponentScore: 7 },
+      { week: 10, opponent: "Tulsa", location: "vs", teamScore: 44, opponentScore: 6 },
+      { week: 11, opponent: "Rice", location: "at", teamScore: 24, opponentScore: 21 },
+      { week: 12, opponent: "North Texas", location: "vs", teamScore: 27, opponentScore: 20 },
+      { week: 13, opponent: "USF", location: "at", teamScore: 20, opponentScore: 14 },
+      { week: 14, note: "Army-Navy Week" },
+      { week: 15, opponent: "Tulsa", location: "vs", neutral: true, title: "American Championship", round: "ccg", teamScore: 14, opponentScore: 20 },
+      { week: 16, opponent: "Hawai'i", location: "vs", neutral: true, title: "Hawaii Bowl", round: "bowl-w1", teamScore: 34, opponentScore: 42 },
+    ],
+  },
+];

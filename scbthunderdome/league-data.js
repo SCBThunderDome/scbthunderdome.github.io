@@ -115,9 +115,9 @@ const COACHES = [
      first name — tools/config.json must use "RekenCrew" to match. */
   { name: "RekenCrew", team: "UCLA",         conference: "B1G", color: "#2D68C4", twitch: "https://www.twitch.tv/rekencrew",     espnId: "26" },
   /* Joined for 2027. Gamertags: evillarry (San Diego State) and Cammo73
-     (Memphis). No twitch links yet; tools/config.json needs Discord IDs
-     under "Larry" and "Cammo" before RTA/heads-up pings can tag them. */
-  { name: "Larry",   team: "San Diego State", conference: "PAC", color: "#A6192E", espnId: "21" },
+     (Memphis). Discord IDs are in tools/config.json under "Larry" and
+     "Cammo". Cammo has no twitch link yet. */
+  { name: "Larry",   team: "San Diego State", conference: "PAC", color: "#A6192E", twitch: "https://www.twitch.tv/delgadodecortho", espnId: "21" },
   { name: "Cammo",   team: "Memphis",        conference: "AAC", color: "#003087", espnId: "235" },
 ];
 

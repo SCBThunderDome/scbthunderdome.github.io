@@ -310,7 +310,7 @@ const TEAM_SCHEDULES = [
     team: "Houston",
     conference: "XII",
     weeks: [
-      { week: 0, opponent: "Georgia Southern", location: "vs" },
+      { week: 0, opponent: "Georgia Southern", location: "vs", teamScore: 49, opponentScore: 25 },
       { week: 1, opponent: "LSU", location: "at", neutral: true },
       { week: 2, note: "BYE" },
       { week: 3, opponent: "Iowa State", location: "at" },
@@ -332,7 +332,7 @@ const TEAM_SCHEDULES = [
     team: "Oklahoma State",
     conference: "XII",
     weeks: [
-      { week: 0, opponent: "Tulsa", location: "vs" },
+      { week: 0, opponent: "Tulsa", location: "vs", teamScore: 47, opponentScore: 24 },
       { week: 1, opponent: "Ball State", location: "vs" },
       { week: 2, opponent: "Arkansas", location: "at" },
       { week: 3, opponent: "West Virginia", location: "vs" },
@@ -385,7 +385,7 @@ const TEAM_SCHEDULES = [
     team: "UCLA",
     conference: "B1G",
     weeks: [
-      { week: 0, opponent: "Hawai'i", location: "at" },
+      { week: 0, opponent: "Hawai'i", location: "at", teamScore: 56, opponentScore: 0 },
       { week: 1, opponent: "California", location: "vs" },
       { week: 2, opponent: "Florida", location: "vs" },
       { week: 3, opponent: "Purdue", location: "at" },

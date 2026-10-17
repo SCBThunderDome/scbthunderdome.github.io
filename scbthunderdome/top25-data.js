@@ -36,4 +36,35 @@
    Shape:
      { week: 0, teams: [{ rank: 1, team: "Georgia", record: "0-0" }, ...] }
    ------------------------------------------------------------ */
-const TOP25 = [];
+const TOP25 = [
+  {
+    week: 0,
+    teams: [
+      { rank: 1, team: "SMU", record: "0-0" },
+      { rank: 2, team: "UCLA", record: "1-0" },
+      { rank: 3, team: "South Carolina", record: "0-0" },
+      { rank: 4, team: "Kentucky", record: "1-0" },
+      { rank: 5, team: "Ohio State", record: "0-0" },
+      { rank: 6, team: "Ole Miss", record: "0-0" },
+      { rank: 7, team: "Oklahoma", record: "0-0" },
+      { rank: 8, team: "Wisconsin", record: "1-0" },
+      { rank: 9, team: "Tennessee", record: "0-0" },
+      { rank: 10, team: "Notre Dame", record: "0-0" },
+      { rank: 11, team: "Indiana", record: "0-0" },
+      { rank: 12, team: "Oklahoma State", record: "1-0" },
+      { rank: 13, team: "Louisville", record: "0-0" },
+      { rank: 14, team: "Duke", record: "0-0" },
+      { rank: 15, team: "Washington", record: "0-0" },
+      { rank: 16, team: "Auburn", record: "0-0" },
+      { rank: 17, team: "BYU", record: "0-0" },
+      { rank: 18, team: "Houston", record: "1-0" },
+      { rank: 19, team: "Texas Tech", record: "0-0" },
+      { rank: 20, team: "NC State", record: "0-0" },
+      { rank: 21, team: "Nebraska", record: "0-0" },
+      { rank: 22, team: "Miami", record: "0-0" },
+      { rank: 23, team: "Michigan", record: "0-0" },
+      { rank: 24, team: "Penn State", record: "0-0" },
+      { rank: 25, team: "Kansas State", record: "0-0" },
+    ],
+  },
+];

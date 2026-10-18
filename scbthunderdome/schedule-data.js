@@ -267,7 +267,7 @@ const TEAM_SCHEDULES = [
     conference: "XII",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "BYU", location: "vs" },
+      { week: 1, opponent: "BYU", location: "vs", teamScore: 24, opponentScore: 14 },
       { week: 2, opponent: "Texas A&M", location: "vs" },
       { week: 3, opponent: "UNLV", location: "at" },
       { week: 4, opponent: "West Virginia", location: "at" },
@@ -386,7 +386,7 @@ const TEAM_SCHEDULES = [
     conference: "B1G",
     weeks: [
       { week: 0, opponent: "Hawai'i", location: "at", teamScore: 56, opponentScore: 0 },
-      { week: 1, opponent: "California", location: "vs" },
+      { week: 1, opponent: "California", location: "vs", teamScore: 38, opponentScore: 10 },
       { week: 2, opponent: "Florida", location: "vs" },
       { week: 3, opponent: "Purdue", location: "at" },
       { week: 4, opponent: "Iowa", location: "at" },

@@ -129,7 +129,7 @@ const TEAM_SCHEDULES = [
     conference: "ACC",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "Tennessee", location: "at", neutral: true },
+      { week: 1, opponent: "Tennessee", location: "at", neutral: true, teamScore: 56, opponentScore: 28 },
       { week: 2, opponent: "Oklahoma", location: "vs" },
       { week: 3, opponent: "Virginia", location: "vs" },
       { week: 4, opponent: "Stanford", location: "vs" },
@@ -175,7 +175,7 @@ const TEAM_SCHEDULES = [
     conference: "ACC",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "UCF", location: "vs" },
+      { week: 1, opponent: "UCF", location: "vs", teamScore: 24, opponentScore: 19 },
       { week: 2, opponent: "Purdue", location: "at" },
       { week: 3, opponent: "Wake Forest", location: "vs" },
       { week: 4, opponent: "UConn", location: "vs" },
@@ -199,7 +199,7 @@ const TEAM_SCHEDULES = [
     conference: "SEC",
     weeks: [
       { week: 0, opponent: "Ball State", location: "vs", teamScore: 31, opponentScore: 0 },
-      { week: 1, opponent: "Toledo", location: "vs" },
+      { week: 1, opponent: "Toledo", location: "vs", teamScore: 59, opponentScore: 0 },
       { week: 2, opponent: "San Jose State", location: "vs" },
       { week: 3, opponent: "LSU", location: "vs" },
       { week: 4, opponent: "Mississippi State", location: "vs" },
@@ -289,7 +289,7 @@ const TEAM_SCHEDULES = [
     conference: "XII",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "Michigan State", location: "at" },
+      { week: 1, opponent: "Michigan State", location: "at", teamScore: 24, opponentScore: 19 },
       { week: 2, opponent: "Northwestern", location: "vs" },
       { week: 3, opponent: "Northern Illinois", location: "vs" },
       { week: 4, opponent: "Iowa State", location: "at" },

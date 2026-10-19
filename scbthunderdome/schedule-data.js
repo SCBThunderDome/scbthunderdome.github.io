@@ -459,7 +459,7 @@ const TEAM_SCHEDULES = [
     conference: "PAC",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "Eastern Michigan", location: "at" },
+      { week: 1, opponent: "Eastern Michigan", location: "at", teamScore: 35, opponentScore: 0 },
       { week: 2, opponent: "Missouri", location: "vs" },
       { week: 3, opponent: "Oklahoma", location: "at" },
       { week: 4, note: "BYE" },

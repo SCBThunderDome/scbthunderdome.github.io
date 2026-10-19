@@ -150,7 +150,7 @@ const TEAM_SCHEDULES = [
     team: "Virginia",
     conference: "ACC",
     weeks: [
-      { week: 0, opponent: "Arkansas State", location: "vs" },
+      { week: 0, opponent: "Arkansas State", location: "vs", teamScore: 38, opponentScore: 19 },
       { week: 1, opponent: "Clemson", location: "at" },
       { week: 2, opponent: "Wake Forest", location: "vs" },
       { week: 3, opponent: "SMU", location: "at" },
@@ -410,7 +410,7 @@ const TEAM_SCHEDULES = [
     team: "Tulane",
     conference: "AAC",
     weeks: [
-      { week: 0, opponent: "Wake Forest", location: "at" },
+      { week: 0, opponent: "Wake Forest", location: "at", teamScore: 38, opponentScore: 16 },
       { week: 1, opponent: "Louisiana", location: "vs" },
       { week: 2, opponent: "Southern Mississippi", location: "at" },
       { week: 3, opponent: "New Mexico State", location: "vs" },

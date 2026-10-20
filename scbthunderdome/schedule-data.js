@@ -333,7 +333,7 @@ const TEAM_SCHEDULES = [
     conference: "XII",
     weeks: [
       { week: 0, opponent: "Tulsa", location: "vs", teamScore: 47, opponentScore: 24 },
-      { week: 1, opponent: "Ball State", location: "vs" },
+      { week: 1, opponent: "Ball State", location: "vs", teamScore: 38, opponentScore: 21 },
       { week: 2, opponent: "Arkansas", location: "at" },
       { week: 3, opponent: "West Virginia", location: "vs" },
       { week: 4, opponent: "Arizona", location: "vs" },

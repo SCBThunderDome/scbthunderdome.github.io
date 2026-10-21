@@ -107,7 +107,7 @@ const TEAM_SCHEDULES = [
     conference: "ACC",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "USF", location: "at" },
+      { week: 1, opponent: "USF", location: "at", teamScore: 24, opponentScore: 17 },
       { week: 2, note: "BYE" },
       { week: 3, opponent: "Vanderbilt", location: "vs" },
       { week: 4, opponent: "Virginia", location: "vs" },

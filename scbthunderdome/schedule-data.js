@@ -130,7 +130,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "Tennessee", location: "at", neutral: true, teamScore: 56, opponentScore: 28 },
-      { week: 2, opponent: "Oklahoma", location: "vs" },
+      { week: 2, opponent: "Oklahoma", location: "vs", teamScore: 126, opponentScore: 0 },
       { week: 3, opponent: "Virginia", location: "vs" },
       { week: 4, opponent: "Stanford", location: "vs" },
       { week: 5, opponent: "Virginia Tech", location: "at" },
@@ -151,7 +151,7 @@ const TEAM_SCHEDULES = [
     conference: "ACC",
     weeks: [
       { week: 0, opponent: "Arkansas State", location: "vs", teamScore: 38, opponentScore: 19 },
-      { week: 1, opponent: "Clemson", location: "at" },
+      { week: 1, opponent: "Clemson", location: "at", teamScore: 52, opponentScore: 21 },
       { week: 2, opponent: "Wake Forest", location: "vs" },
       { week: 3, opponent: "SMU", location: "at" },
       { week: 4, opponent: "Louisville", location: "at" },
@@ -243,7 +243,7 @@ const TEAM_SCHEDULES = [
     conference: "SEC",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "Wisconsin", location: "at", neutral: true },
+      { week: 1, opponent: "Wisconsin", location: "at", neutral: true, teamScore: 45, opponentScore: 31 },
       { week: 2, opponent: "Appalachian State", location: "vs" },
       { week: 3, opponent: "Florida", location: "at" },
       { week: 4, opponent: "Florida International", location: "vs" },
@@ -360,7 +360,7 @@ const TEAM_SCHEDULES = [
     conference: "B1G",
     weeks: [
       { week: 0, opponent: "Pittsburgh", location: "at", neutral: true, teamScore: 33, opponentScore: 25 },
-      { week: 1, opponent: "South Carolina", location: "vs", neutral: true },
+      { week: 1, opponent: "South Carolina", location: "vs", neutral: true, teamScore: 31, opponentScore: 45 },
       { week: 2, opponent: "Penn State", location: "vs" },
       { week: 3, opponent: "Colorado State", location: "vs" },
       { week: 4, opponent: "USC", location: "at" },
@@ -411,7 +411,7 @@ const TEAM_SCHEDULES = [
     conference: "AAC",
     weeks: [
       { week: 0, opponent: "Wake Forest", location: "at", teamScore: 38, opponentScore: 16 },
-      { week: 1, opponent: "Louisiana", location: "vs" },
+      { week: 1, opponent: "Louisiana", location: "vs", teamScore: 41, opponentScore: 23 },
       { week: 2, opponent: "Southern Mississippi", location: "at" },
       { week: 3, opponent: "New Mexico State", location: "vs" },
       { week: 4, note: "BYE" },

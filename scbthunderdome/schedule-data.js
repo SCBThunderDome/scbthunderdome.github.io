@@ -311,7 +311,7 @@ const TEAM_SCHEDULES = [
     conference: "XII",
     weeks: [
       { week: 0, opponent: "Georgia Southern", location: "vs", teamScore: 49, opponentScore: 25 },
-      { week: 1, opponent: "LSU", location: "at", neutral: true },
+      { week: 1, opponent: "LSU", location: "at", neutral: true, teamScore: 50, opponentScore: 21 },
       { week: 2, note: "BYE" },
       { week: 3, opponent: "Iowa State", location: "at" },
       { week: 4, opponent: "Central Michigan", location: "vs" },
@@ -436,7 +436,7 @@ const TEAM_SCHEDULES = [
     conference: "AAC",
     weeks: [
       { week: 0, note: "BYE" },
-      { week: 1, opponent: "Miami University", location: "vs" },
+      { week: 1, opponent: "Miami University", location: "vs", teamScore: 34, opponentScore: 21 },
       { week: 2, opponent: "Arkansas State", location: "at" },
       { week: 3, opponent: "Southern Mississippi", location: "vs" },
       { week: 4, opponent: "Middle Tennessee", location: "at" },

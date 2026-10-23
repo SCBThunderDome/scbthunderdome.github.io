@@ -176,7 +176,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "UCF", location: "vs", teamScore: 24, opponentScore: 19 },
-      { week: 2, opponent: "Purdue", location: "at" },
+      { week: 2, opponent: "Purdue", location: "at", teamScore: 17, opponentScore: 23 },
       { week: 3, opponent: "Wake Forest", location: "vs" },
       { week: 4, opponent: "UConn", location: "vs" },
       { week: 5, note: "BYE" },
@@ -222,7 +222,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, note: "BYE" },
       { week: 1, note: "BYE" },
-      { week: 2, opponent: "San Diego State", location: "at" },
+      { week: 2, opponent: "San Diego State", location: "at", teamScore: 24, opponentScore: 27 },
       { week: 3, opponent: "Western Kentucky", location: "at" },
       { week: 4, opponent: "Florida", location: "vs" },
       { week: 5, opponent: "Florida Atlantic", location: "vs" },
@@ -244,7 +244,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "Wisconsin", location: "at", neutral: true, teamScore: 45, opponentScore: 31 },
-      { week: 2, opponent: "Appalachian State", location: "vs" },
+      { week: 2, opponent: "Appalachian State", location: "vs", teamScore: 66, opponentScore: 0 },
       { week: 3, opponent: "Florida", location: "at" },
       { week: 4, opponent: "Florida International", location: "vs" },
       { week: 5, opponent: "Kentucky", location: "vs" },
@@ -334,7 +334,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, opponent: "Tulsa", location: "vs", teamScore: 47, opponentScore: 24 },
       { week: 1, opponent: "Ball State", location: "vs", teamScore: 38, opponentScore: 21 },
-      { week: 2, opponent: "Arkansas", location: "at" },
+      { week: 2, opponent: "Arkansas", location: "at", teamScore: 31, opponentScore: 20 },
       { week: 3, opponent: "West Virginia", location: "vs" },
       { week: 4, opponent: "Arizona", location: "vs" },
       { week: 5, opponent: "TCU", location: "vs" },
@@ -437,7 +437,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "Miami University", location: "vs", teamScore: 34, opponentScore: 21 },
-      { week: 2, opponent: "Arkansas State", location: "at" },
+      { week: 2, opponent: "Arkansas State", location: "at", teamScore: 31, opponentScore: 38 },
       { week: 3, opponent: "Southern Mississippi", location: "vs" },
       { week: 4, opponent: "Middle Tennessee", location: "at" },
       { week: 5, opponent: "Tulane", location: "at" },
@@ -460,7 +460,7 @@ const TEAM_SCHEDULES = [
     weeks: [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "Eastern Michigan", location: "at", teamScore: 35, opponentScore: 0 },
-      { week: 2, opponent: "Missouri", location: "vs" },
+      { week: 2, opponent: "Missouri", location: "vs", teamScore: 27, opponentScore: 24 },
       { week: 3, opponent: "Oklahoma", location: "at" },
       { week: 4, note: "BYE" },
       { week: 5, opponent: "North Texas", location: "vs" },

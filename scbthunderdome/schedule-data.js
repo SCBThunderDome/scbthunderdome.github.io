@@ -313,7 +313,7 @@ const TEAM_SCHEDULES = [
       { week: 0, opponent: "Georgia Southern", location: "vs", teamScore: 49, opponentScore: 25 },
       { week: 1, opponent: "LSU", location: "at", neutral: true, teamScore: 50, opponentScore: 21 },
       { week: 2, note: "BYE" },
-      { week: 3, opponent: "Iowa State", location: "at" },
+      { week: 3, opponent: "Iowa State", location: "at", teamScore: 36, opponentScore: 24 },
       { week: 4, opponent: "Central Michigan", location: "vs" },
       { week: 5, opponent: "Colorado", location: "vs" },
       { week: 6, opponent: "Cincinnati", location: "at" },

@@ -50,8 +50,8 @@ const SEASON = {
 
   currentWeek: 3,
   statusLine: "WEEK 3",
-  nextAdvanceAt: "2026-10-26T23:00:00-04:00",
-  nextAdvance: "Monday, October 26th — 11:00 PM EDT",
+  nextAdvanceAt: "2026-10-27T23:00:00-04:00",
+  nextAdvance: "Tuesday, October 27th — 11:00 PM EDT",
 };
 
 /* ------------------------------------------------------------

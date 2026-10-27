@@ -177,7 +177,7 @@ const TEAM_SCHEDULES = [
       { week: 0, note: "BYE" },
       { week: 1, opponent: "UCF", location: "vs", teamScore: 24, opponentScore: 19 },
       { week: 2, opponent: "Purdue", location: "at", teamScore: 17, opponentScore: 23 },
-      { week: 3, opponent: "Wake Forest", location: "vs" },
+      { week: 3, opponent: "Wake Forest", location: "vs", teamScore: 2, opponentScore: 12 },
       { week: 4, opponent: "UConn", location: "vs" },
       { week: 5, note: "BYE" },
       { week: 6, opponent: "Virginia", location: "vs" },

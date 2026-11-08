@@ -104,7 +104,7 @@ const COACHES = [
   { name: "Andrew",  team: "SMU",            conference: "ACC", color: "#5A6FD1", twitch: "https://www.twitch.tv/ape8119",        espnId: "2567" },
   { name: "Craig",   team: "Virginia",       conference: "ACC", color: "#E8703F", twitch: "https://www.twitch.tv/planetbouncy",   espnId: "258" },  // espnId UNVERIFIED
   { name: "Elton",   team: "North Carolina", conference: "ACC", color: "#7BAFD4", twitch: "https://www.twitch.tv/dcgqmanoftheyear7", espnId: "153" },  // Moved from Virginia Tech to North Carolina for 2027 (gamertag EHDC12).
-  { name: "Jake",    team: "Kentucky",       conference: "SEC", color: "#4B7BD6", twitch: "https://www.twitch.tv/jakefols",       espnId: "96" },  // espnId UNVERIFIED
+  { name: "Jake",    team: "Kentucky",       conference: "SEC", color: "#4B7BD6", twitch: "https://www.twitch.tv/jakefols",       espnId: "96", departedAfterWeek: 6 },  // Went inactive after Week 6 (2026-11-08); Kentucky is CPU from Week 7. espnId UNVERIFIED
   { name: "John",    team: "Arizona State",  conference: "XII", color: "#B5486B", twitch: "https://www.twitch.tv/backeru369",     espnId: "9" },  // "ASU" on the sheet; Arizona State confirmed by Josh. espnId UNVERIFIED
   { name: "Richard", team: "Houston",        conference: "XII", color: "#CB3B47", twitch: "https://www.twitch.tv/haveyoutriedrunning", espnId: "248" },  // espnId UNVERIFIED
   { name: "Toure",   team: "Colorado",       conference: "XII", color: "#CFB87C", twitch: "https://www.twitch.tv/psualum10",      espnId: "38" },

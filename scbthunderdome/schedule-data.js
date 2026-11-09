@@ -392,7 +392,7 @@ const TEAM_SCHEDULES = [
       { week: 4, opponent: "Iowa", location: "at", teamScore: 42, opponentScore: 35 },
       { week: 5, opponent: "Northwestern", location: "vs", teamScore: 56, opponentScore: 17 },
       { week: 6, note: "BYE" },
-      { week: 7, opponent: "Michigan", location: "vs" },
+      { week: 7, opponent: "Michigan", location: "vs", teamScore: 63, opponentScore: 17 },
       { week: 8, opponent: "Illinois", location: "at" },
       { week: 9, opponent: "Oregon", location: "vs" },
       { week: 10, opponent: "Wisconsin", location: "at" },

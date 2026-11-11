@@ -249,7 +249,7 @@ const TEAM_SCHEDULES = [
       { week: 4, opponent: "Florida International", location: "vs", teamScore: 70, opponentScore: 0 },
       { week: 5, opponent: "Kentucky", location: "vs", teamScore: 24, opponentScore: 16 },
       { week: 6, opponent: "Arkansas", location: "vs" },
-      { week: 7, opponent: "Auburn", location: "vs" },
+      { week: 7, opponent: "Auburn", location: "vs", teamScore: 47, opponentScore: 0 },
       { week: 8, opponent: "Georgia", location: "at" },
       { week: 9, note: "BYE" },
       { week: 10, opponent: "Texas", location: "at" },

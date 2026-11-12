@@ -466,7 +466,7 @@ const TEAM_SCHEDULES = [
       { week: 5, opponent: "North Texas", location: "vs", teamScore: 23, opponentScore: 14 },
       { week: 6, opponent: "Utah State", location: "at", teamScore: 45, opponentScore: 17 },
       { week: 7, opponent: "Fresno State", location: "at", teamScore: 34, opponentScore: 6 },
-      { week: 8, opponent: "Washington State", location: "at" },
+      { week: 8, opponent: "Washington State", location: "at", teamScore: 28, opponentScore: 24 },
       { week: 9, opponent: "Fresno State", location: "vs" },
       { week: 10, opponent: "Texas State", location: "at" },
       { week: 11, opponent: "Oregon State", location: "vs" },

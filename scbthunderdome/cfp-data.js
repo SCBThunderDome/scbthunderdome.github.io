@@ -125,6 +125,59 @@
    that week.
    ============================================================ */
 
-const CFP_POLL = [];
+const CFP_POLL = [
+  {
+    week: 10,
+    teams: [
+      { rank: 1, team: "SMU", record: "9-0" },
+      { rank: 2, team: "South Carolina", record: "8-0" },
+      { rank: 3, team: "Wisconsin", record: "8-1" },
+      { rank: 4, team: "Boise State", record: "8-0" },
+      { rank: 5, team: "Arizona State", record: "8-0" },
+      { rank: 6, team: "Louisville", record: "7-1" },
+      { rank: 7, team: "Michigan", record: "8-1" },
+      { rank: 8, team: "UCLA", record: "8-1" },
+      { rank: 9, team: "Oklahoma State", record: "7-1" },
+      { rank: 10, team: "Notre Dame", record: "8-2" },
+      { rank: 11, team: "Miami", record: "7-2" },
+      { rank: 12, team: "Oklahoma", record: "6-2" },
+      { rank: 13, team: "Tennessee", record: "6-3" },
+      { rank: 14, team: "LSU", record: "7-2" },
+      { rank: 15, team: "Kansas State", record: "6-2" },
+      { rank: 16, team: "Houston", record: "7-2" },
+      { rank: 17, team: "Tulane", record: "6-2" },
+      { rank: 18, team: "Auburn", record: "6-2" },
+      { rank: 19, team: "Duke", record: "6-2" },
+      { rank: 20, team: "Ole Miss", record: "6-2" },
+      { rank: 21, team: "Ohio State", record: "6-2" },
+      { rank: 22, team: "Colorado", record: "8-0" },
+      { rank: 23, team: "USC", record: "6-3" },
+      { rank: 24, team: "San Diego State", record: "7-1" },
+      { rank: 25, team: "Texas Tech", record: "6-3" },
+    ],
+  },
+];
 
-const CFP_BRACKET = [];
+const CFP_BRACKET = [
+  {
+    week: 10,
+    projected: true,
+    seeds: [
+      { seed:  1, team: "SMU", record: "9-0", auto: true },
+      { seed:  2, team: "South Carolina", record: "8-0", auto: true },
+      { seed:  3, team: "Wisconsin", record: "8-1", auto: true },
+      { seed:  4, team: "Boise State", record: "8-0", auto: true },
+      { seed:  5, team: "Arizona State", record: "8-0", auto: true },
+      { seed:  6, team: "Louisville", record: "7-1" },
+      { seed:  7, team: "Michigan", record: "8-1" },
+      { seed:  8, team: "UCLA", record: "8-1" },
+      { seed:  9, team: "Oklahoma State", record: "7-1" },
+      { seed: 10, team: "Notre Dame", record: "8-2", auto: true },
+      { seed: 11, team: "Miami", record: "7-2" },
+      { seed: 12, team: "Oklahoma", record: "6-2" },
+    ],
+    bowls: {
+      site: "New Orleans, LA",
+    },
+  },
+];

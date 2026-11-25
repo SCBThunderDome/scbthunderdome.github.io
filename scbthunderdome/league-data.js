@@ -48,10 +48,10 @@ const SEASON = {
   // archive if that's ever turned on here.
   year: 2027,
 
-  currentWeek: 11,
-  statusLine: "WEEK 11",
-  nextAdvanceAt: "2026-11-24T23:00:00-05:00",
-  nextAdvance: "Tuesday, November 24th — 11:00 PM EST",
+  currentWeek: 12,
+  statusLine: "WEEK 12",
+  nextAdvanceAt: "2026-11-27T23:00:00-05:00",
+  nextAdvance: "Friday, November 27th — 11:00 PM EST",
 };
 
 /* ------------------------------------------------------------

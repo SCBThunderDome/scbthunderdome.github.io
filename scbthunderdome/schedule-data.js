@@ -422,7 +422,7 @@ const TEAM_SCHEDULES = [
       { week: 9, note: "BYE" },
       { week: 10, opponent: "Tulsa", location: "at", teamScore: 56, opponentScore: 20 },
       { week: 11, opponent: "UTSA", location: "at", teamScore: 52, opponentScore: 0 },
-      { week: 12, opponent: "Temple", location: "at" },
+      { week: 12, opponent: "Temple", location: "at", teamScore: 16, opponentScore: 22 },
       { week: 13, opponent: "Rice", location: "vs" },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, note: "BYE" },

@@ -300,7 +300,7 @@ const TEAM_SCHEDULES = [
       { week: 9, opponent: "West Virginia", location: "vs", teamScore: 27, opponentScore: 19 },
       { week: 10, opponent: "Kansas", location: "vs", teamScore: 14, opponentScore: 26 },
       { week: 11, opponent: "Arizona State", location: "vs", teamScore: 49, opponentScore: 28 },
-      { week: 12, opponent: "TCU", location: "vs" },
+      { week: 12, opponent: "TCU", location: "vs", teamScore: 35, opponentScore: 14 },
       { week: 13, opponent: "BYU", location: "at" },
       { week: 14, note: "Army-Navy Week" },
       { week: 15, note: "BYE" },
